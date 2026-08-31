@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fiche opération — DomPilot</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="app.js"></script>
+<script>
+const content = dpRenderShell("operations", "Fiche opération", "");
+let OPID = new URLSearchParams(window.location.search).get("id");
+let isNew = !OPID;
+let op = isNew ? null : DP.operations.find(o => o.id === OPID);
+
+if (content) {
+  if (!isNew && !op) {
+    content.innerHTML = `<div class="empty-state">Opération introuvable. <a href="operations.html">Retour à la liste</a></div>`;
+  } else {
+    render();
+  }
+}
+
+function blankOp() {
+  return {
+    id: dpUid("pr"), nom: "", commune: "", territoire: DP.territoires[0],
+    typeOperation: DP.typesOperation[0], natureProduit: DP.naturesProduit[0],
+    phase: "Développement", responsable: DP.utilisateurs[0].identifiant, nbLogements: 0,
+    budgetPrevisionnel: 0, budgetEngage: 0,
+    dateSignatureFoncier: "", dateLivraisonPrevue: "",
+    jalons: DP.jalonsTypes.map(j => ({ libelle: j, date: "", statut: "attente" })),
+    taches: [], comptesRendus: []
+  };
+}
+
+function render() {
+  const o = isNew ? blankOp() : op;
+
+  document.querySelector(".topbar h1").textContent = isNew ? "Nouvelle opération" : o.nom;
+  document.querySelector(".topbar-sub") ?.remove();
+  const subEl = document.createElement("div");
+  subEl.className = "topbar-sub";
+  subEl.textContent = isNew ? "Créez une fiche opération" : `${o.commune} · ${o.territoire}`;
+  document.querySelector(".topbar h1").insertAdjacentElement("afterend", subEl);
+
+  const budgetPct = o.budgetPrevisionnel ? Math.min(100, Math.round((o.budgetEngage / o.budgetPrevisionnel) * 100)) : 0;
+
+  content.innerHTML = `
+    <div class="toolbar">
+      <a href="operations.html" class="btn btn-outline btn-sm">← Retour à la liste</a>
+      <div class="flex gap-8">
+        ${!isNew ? `<button class="btn btn-danger" onclick="deleteOp()">Supprimer l'opération</button>` : ""}
+        <button class="btn btn-primary" onclick="saveInfos()">💾 Enregistrer</button>
+      </div>
+    </div>
+
+    ${!isNew ? `
+    <div class="kpi-grid" style="margin-bottom:18px;">
+      <div class="kpi-card"><div class="kpi-label">Phase</div>
+        <div class="kpi-value" style="font-size:16px;"><span class="badge ${dpPhaseBadgeClass(o.phase)}">${o.phase}</span></div></div>
+      <div class="kpi-card"><div class="kpi-label">Logements</div><div class="kpi-value">${o.nbLogements}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Budget engagé</div>
+        <div class="kpi-value" style="font-size:20px;">${budgetPct}%</div>
+        <div class="progress-bar" style="margin-top:8px;"><div class="progress-bar-fill" style="width:${budgetPct}%;"></div></div>
+      </div>
+      <div class="kpi-card"><div class="kpi-label">Livraison prévue</div><div class="kpi-value" style="font-size:18px;">${dpFormatDate(o.dateLivraisonPrevue)}</div></div>
+    </div>` : ""}
+
+    <div class="tabs">
+      <div class="tab-btn active" data-tab="infos" onclick="switchTab('infos')">Infos générales</div>
+      <div class="tab-btn" data-tab="planning" onclick="switchTab('planning')">Planning &amp; jalons</div>
+      <div class="tab-btn" data-tab="finances" onclick="switchTab('finances')">Suivi financier</div>
+      <div class="tab-btn" data-tab="taches" onclick="switchTab('taches')">Tâches &amp; comptes rendus</div>
+    </div>
+
+    <div class="tab-panel active" id="tab-infos">${renderInfosTab(o)}</div>
+    <div class="tab-panel" id="tab-planning">${renderPlanningTab(o)}</div>
+    <div class="tab-panel" id="tab-finances">${renderFinancesTab(o)}</div>
+    <div class="tab-panel" id="tab-taches">${renderTachesTab(o)}</div>
+  `;
+}
+
+function switchTab(tab) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.id === "tab-" + tab));
+}
+
+/* ---------------- Onglet Infos ---------------- */
+function renderInfosTab(o) {
+  return `
+    <div class="card">
+      <div class="field"><label>Nom de l'opération</label><input id="i-nom" value="${o.nom}" placeholder="ex. Résidence Les Lauriers"></div>
+      <div class="field-row">
+        <div class="field"><label>Commune</label><input id="i-commune" value="${o.commune}"></div>
+        <div class="field"><label>Territoire</label>
+          <select id="i-territoire">${DP.territoires.map(t => `<option ${o.territoire===t?"selected":""}>${t}</option>`).join("")}</select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Type d'opération</label>
+          <select id="i-type">${DP.typesOperation.map(t => `<option ${o.typeOperation===t?"selected":""}>${t}</option>`).join("")}</select></div>
+        <div class="field"><label>Nature du produit</label>
+          <select id="i-nature">${DP.naturesProduit.map(t => `<option ${o.natureProduit===t?"selected":""}>${t}</option>`).join("")}</select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Phase</label>
+          <select id="i-phase">${DP.phases.map(p => `<option ${o.phase===p?"selected":""}>${p}</option>`).join("")}</select></div>
+        <div class="field"><label>Responsable de l'opération</label>
+          <select id="i-responsable">${DP.utilisateurs.map(u => `<option value="${u.identifiant}" ${o.responsable===u.identifiant?"selected":""}>${u.nom}</option>`).join("")}</select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Nombre de logements</label><input id="i-lgts" type="number" value="${o.nbLogements}"></div>
+        <div class="field"><label>Date de livraison prévue</label><input id="i-livraison" type="date" value="${o.dateLivraisonPrevue}"></div>
+      </div>
+    </div>
+  `;
+}
+
+function collectInfosFromForm(o) {
+  o.nom = document.getElementById("i-nom").value.trim();
+  o.commune = document.getElementById("i-commune").value.trim();
+  o.territoire = document.getElementById("i-territoire").value;
+  o.typeOperation = document.getElementById("i-type").value;
+  o.natureProduit = document.getElementById("i-nature").value;
+  o.phase = document.getElementById("i-phase").value;
+  o.responsable = document.getElementById("i-responsable").value;
+  o.nbLogements = parseInt(document.getElementById("i-lgts").value) || 0;
+  o.dateLivraisonPrevue = document.getElementById("i-livraison").value;
+}
+
+function saveInfos() {
+  const o = isNew ? blankOp() : op;
+  collectInfosFromForm(o);
+  if (!o.nom) { alert("Le nom de l'opération est requis."); switchTab("infos"); return; }
+
+  if (isNew) {
+    DP.operations.push(o);
+    dpPersist();
+    window.location.href = "operation.html?id=" + o.id;
+  } else {
+    dpPersist();
+    render();
+    switchTab("infos");
+  }
+}
+
+/* ---------------- Onglet Planning / jalons ---------------- */
+function renderPlanningTab(o) {
+  if (isNew) return `<div class="empty-state">Enregistrez d'abord la fiche pour gérer le planning.</div>`;
+  const items = (o.jalons || []).map((j, idx) => `
+    <li class="${j.statut === 'fait' ? 'done' : j.statut === 'encours' ? 'current' : ''}">
+      <div class="dot"></div>
+      <div style="flex:1;">
+        <div class="tl-title">${j.libelle}</div>
+        <div class="tl-date">${dpFormatDate(j.date)}</div>
+      </div>
+      <select onchange="updateJalonStatut(${idx}, this.value)" style="width:120px;">
+        <option value="attente" ${j.statut==='attente'?'selected':''}>À venir</option>
+        <option value="encours" ${j.statut==='encours'?'selected':''}>En cours</option>
+        <option value="fait" ${j.statut==='fait'?'selected':''}>Fait</option>
+      </select>
+      <input type="date" value="${j.date}" style="width:150px;margin-left:8px;" onchange="updateJalonDate(${idx}, this.value)">
+    </li>
+  `).join("");
+  return `
+    <div class="card">
+      <div class="card-title">Jalons de l'opération</div>
+      <ul class="timeline">${items || '<div class="empty-state">Aucun jalon défini.</div>'}</ul>
+    </div>
+  `;
+}
+function updateJalonStatut(idx, val) { op.jalons[idx].statut = val; dpPersist(); }
+function updateJalonDate(idx, val) { op.jalons[idx].date = val; dpPersist(); }
+
+/* ---------------- Onglet Finances ---------------- */
+function renderFinancesTab(o) {
+  if (isNew) return `<div class="empty-state">Enregistrez d'abord la fiche pour gérer le budget.</div>`;
+  const pct = o.budgetPrevisionnel ? Math.min(100, Math.round((o.budgetEngage / o.budgetPrevisionnel) * 100)) : 0;
+  return `
+    <div class="card">
+      <div class="card-title">Budget global</div>
+      <div class="field-row">
+        <div class="field"><label>Budget prévisionnel (€)</label>
+          <input id="f-budget-prev" type="number" value="${o.budgetPrevisionnel}" onchange="updateBudget()"></div>
+        <div class="field"><label>Budget engagé (€)</label>
+          <input id="f-budget-eng" type="number" value="${o.budgetEngage}" onchange="updateBudget()"></div>
+      </div>
+      <div style="margin-top:6px;">
+        <div class="flex-between" style="font-size:12.5px;margin-bottom:4px;">
+          <span>Taux d'engagement</span><span class="text-muted">${pct}%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>
+      </div>
+    </div>
+    <div class="card mt-20">
+      <div class="card-title">Postes de dépense de référence</div>
+      <div class="text-muted mb-14">Répartition indicative — à affiner poste par poste lors du bilan d'opération.</div>
+      <table>
+        <thead><tr><th>Poste</th><th>Part indicative</th></tr></thead>
+        <tbody>
+          ${DP.postesBudget.map((p, i) => `
+            <tr><td>${p}</td><td><span class="badge badge-bleu">${Math.round(100/DP.postesBudget.length)}%</span></td></tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+function updateBudget() {
+  op.budgetPrevisionnel = parseFloat(document.getElementById("f-budget-prev").value) || 0;
+  op.budgetEngage = parseFloat(document.getElementById("f-budget-eng").value) || 0;
+  dpPersist();
+  render();
+  switchTab("finances");
+}
+
+/* ---------------- Onglet Tâches & CR ---------------- */
+function renderTachesTab(o) {
+  if (isNew) return `<div class="empty-state">Enregistrez d'abord la fiche pour ajouter des tâches.</div>`;
+  const taches = (o.taches || []).map((t, idx) => `
+    <div class="flex-between" style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
+      <label style="display:flex;align-items:center;gap:9px;font-weight:400;margin:0;">
+        <input type="checkbox" style="width:auto;" ${t.fait ? "checked" : ""} onchange="toggleTache(${idx})">
+        <span style="${t.fait ? 'text-decoration:line-through;color:#8393a3;' : ''}">${t.titre}</span>
+      </label>
+      <span class="text-muted">${dpFormatDate(t.echeance)}</span>
+    </div>
+  `).join("") || `<div class="empty-state">Aucune tâche.</div>`;
+
+  const crs = (o.comptesRendus || []).slice().reverse().map(c => `
+    <div style="padding:10px 0;border-bottom:1px solid var(--gris-bordure);">
+      <div class="flex-between"><strong style="font-size:13px;">${dpUserName(c.auteur)}</strong><span class="text-muted">${dpFormatDate(c.date)}</span></div>
+      <div style="font-size:13.5px;margin-top:4px;">${c.texte}</div>
+    </div>
+  `).join("") || `<div class="empty-state">Aucun compte rendu.</div>`;
+
+  return `
+    <div class="grid-2">
+      <div class="card">
+        <div class="flex-between mb-14">
+          <div class="card-title mt-0" style="margin:0;">Tâches</div>
+          <button class="btn btn-sm btn-outline" onclick="addTache()">+ Ajouter</button>
+        </div>
+        ${taches}
+      </div>
+      <div class="card">
+        <div class="flex-between mb-14">
+          <div class="card-title mt-0" style="margin:0;">Comptes rendus</div>
+          <button class="btn btn-sm btn-outline" onclick="addCR()">+ Ajouter</button>
+        </div>
+        ${crs}
+      </div>
+    </div>
+  `;
+}
+function toggleTache(idx) { op.taches[idx].fait = !op.taches[idx].fait; dpPersist(); render(); switchTab("taches"); }
+function addTache() {
+  const titre = prompt("Intitulé de la tâche :");
+  if (!titre) return;
+  const echeance = prompt("Échéance (AAAA-MM-JJ), optionnel :") || "";
+  op.taches.push({ titre, echeance, fait: false });
+  dpPersist(); render(); switchTab("taches");
+}
+function addCR() {
+  const texte = prompt("Contenu du compte rendu :");
+  if (!texte) return;
+  const session = dpGetSession();
+  op.comptesRendus.push({ date: new Date().toISOString().slice(0,10), auteur: session.identifiant, texte });
+  dpPersist(); render(); switchTab("taches");
+}
+
+/* ---------------- Suppression ---------------- */
+function deleteOp() {
+  if (!confirm("Supprimer définitivement cette opération ?")) return;
+  DP.operations = DP.operations.filter(o => o.id !== op.id);
+  dpPersist();
+  window.location.href = "operations.html";
+}
+</script>
+</body>
+</html>
