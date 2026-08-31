@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DomPilot — Connexion</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card" id="login-card">
+    <div class="logo-mark">DP</div>
+    <h2>DomPilot</h2>
+    <div class="subtitle" id="login-subtitle">Pôle Immobilier — Pilotage des opérations</div>
+    <div class="text-muted" style="text-align:center;margin-top:10px;" id="loading-msg">Chargement…</div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+let pendingUser = null;
+
+async function init() {
+  // Si déjà connecté, on file directement au dashboard.
+  if (dpGetSession()) { window.location.href = "dashboard.html"; return; }
+
+  // Si un dépôt privé est configuré, on récupère l'état le plus récent des
+  // comptes (mots de passe définis ailleurs) avant d'afficher le formulaire.
+  if (dpGetGithubConfig()) {
+    await dpLoadFromGitHub();
+  }
+  renderLoginForm();
+}
+
+function renderLoginForm() {
+  document.getElementById("login-card").innerHTML = `
+    <div class="logo-mark">DP</div>
+    <h2>DomPilot</h2>
+    <div class="subtitle">Pôle Immobilier — Pilotage des opérations</div>
+
+    <div class="login-error" id="login-error">Identifiant ou mot de passe incorrect.</div>
+
+    <div class="field">
+      <label>Identifiant</label>
+      <input type="text" id="login-id" placeholder="ex. s.lefevre" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Mot de passe</label>
+      <input type="password" id="login-pwd" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" onclick="dpTryLogin()">Se connecter</button>
+    <div class="text-muted" style="text-align:center;margin-top:14px;">
+      Première connexion ? Entrez votre identifiant, laissez le mot de passe vide ou tapez
+      n'importe quoi : vous serez invité(e) à choisir votre mot de passe personnel.
+    </div>
+  `;
+  document.getElementById("login-pwd").addEventListener("keydown", e => {
+    if (e.key === "Enter") dpTryLogin();
+  });
+}
+
+async function dpTryLogin() {
+  const id = document.getElementById("login-id").value.trim().toLowerCase();
+  const pwd = document.getElementById("login-pwd").value;
+  const errEl = document.getElementById("login-error");
+  errEl.style.display = "none";
+
+  const user = DP.utilisateurs.find(u => u.identifiant.toLowerCase() === id);
+  if (!user) { errEl.textContent = "Identifiant inconnu."; errEl.style.display = "block"; return; }
+
+  if (!user.passwordHash) {
+    // Première connexion : on demande de choisir un mot de passe.
+    pendingUser = user;
+    renderFirstConnectionForm(user);
+    return;
+  }
+
+  if (!pwd) { errEl.textContent = "Mot de passe requis."; errEl.style.display = "block"; return; }
+  const hash = await dpHashPassword(pwd, user.salt);
+  if (hash !== user.passwordHash) {
+    errEl.textContent = "Identifiant ou mot de passe incorrect.";
+    errEl.style.display = "block";
+    return;
+  }
+  dpSetSession(user);
+  window.location.href = "dashboard.html";
+}
+
+function renderFirstConnectionForm(user) {
+  document.getElementById("login-card").innerHTML = `
+    <div class="logo-mark">DP</div>
+    <h2>${user.nom}</h2>
+    <div class="subtitle">🔐 Première connexion — choisissez votre mot de passe</div>
+
+    <div class="login-error" id="fc-error">Les mots de passe ne correspondent pas.</div>
+
+    <div class="field">
+      <label>Nouveau mot de passe</label>
+      <input type="password" id="fc-pwd1" placeholder="8 caractères minimum">
+    </div>
+    <div class="field">
+      <label>Confirmer le mot de passe</label>
+      <input type="password" id="fc-pwd2" placeholder="••••••••">
+    </div>
+    <button class="btn btn-primary" onclick="dpSetFirstPassword()">Valider</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:6px;" onclick="renderLoginForm()">← Retour</button>
+  `;
+}
+
+async function dpSetFirstPassword() {
+  const p1 = document.getElementById("fc-pwd1").value;
+  const p2 = document.getElementById("fc-pwd2").value;
+  const errEl = document.getElementById("fc-error");
+
+  if (p1.length < 8) {
+    errEl.textContent = "Le mot de passe doit contenir au moins 8 caractères.";
+    errEl.style.display = "block";
+    return;
+  }
+  if (p1 !== p2) {
+    errEl.textContent = "Les mots de passe ne correspondent pas.";
+    errEl.style.display = "block";
+    return;
+  }
+  errEl.style.display = "none";
+
+  const salt = dpGenSalt();
+  const hash = await dpHashPassword(p1, salt);
+  pendingUser.salt = salt;
+  pendingUser.passwordHash = hash;
+  dpPersist();
+
+  // On pousse immédiatement le mot de passe vers le dépôt privé (s'il est
+  // configuré) pour que ce compte soit utilisable depuis un autre poste.
+  if (dpGetGithubConfig()) {
+    await dpSyncWithGitHub();
+  }
+
+  dpSetSession(pendingUser);
+  window.location.href = "dashboard.html";
+}
+
+init();
+</script>
+</body>
+</html>
