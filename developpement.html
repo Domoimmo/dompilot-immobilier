@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Développement — DomPilot</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="app.js"></script>
+<script>
+const STATUTS = ["En cours", "À signer", "Signé", "Transmis MO", "Sans suite"];
+const content = dpRenderShell("developpement", "Développement", "Pipeline des opportunités foncières");
+if (content) render();
+
+function render() {
+  const cols = STATUTS.map(statut => {
+    const items = DP.opportunites.filter(o => o.statut === statut);
+    return `
+      <div class="kanban-col">
+        <div class="kanban-col-header">
+          <span>${statut}</span>
+          <span class="count">${items.length}</span>
+        </div>
+        <div class="kanban-cards">
+          ${items.map(o => `
+            <div class="kanban-card" onclick="openOpp('${o.id}')">
+              <div class="kc-title">${o.nom}</div>
+              <div class="kc-meta">${o.commune} · ${o.territoire}</div>
+              <div class="kc-foot">
+                <span>🏠 ${o.potentielLogements} lgts</span>
+                <span>${dpFormatDate(o.dateProspection)}</span>
+              </div>
+            </div>
+          `).join("") || `<div class="empty-state" style="padding:16px 4px;">Aucune opportunité</div>`}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  content.innerHTML = `
+    <div class="toolbar">
+      <div class="text-muted">${DP.opportunites.length} opportunités recensées · cliquez une carte pour l'éditer</div>
+      <button class="btn btn-accent" onclick="openOpp(null)">+ Nouvelle opportunité</button>
+    </div>
+    <div class="kanban">${cols}</div>
+  `;
+}
+
+function openOpp(id) {
+  const opp = id ? DP.opportunites.find(o => o.id === id) : null;
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay open";
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <h3>${opp ? "Modifier l'opportunité" : "Nouvelle opportunité"}</h3>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="field"><label>Nom de l'opportunité</label>
+        <input id="f-nom" value="${opp ? opp.nom : ""}" placeholder="ex. Ancien site industriel"></div>
+      <div class="field-row">
+        <div class="field"><label>Commune</label><input id="f-commune" value="${opp ? opp.commune : ""}"></div>
+        <div class="field"><label>Territoire</label>
+          <select id="f-territoire">${DP.territoires.map(t => `<option ${opp && opp.territoire===t?"selected":""}>${t}</option>`).join("")}</select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Statut</label>
+          <select id="f-statut">${STATUTS.map(s => `<option ${opp && opp.statut===s?"selected":""}>${s}</option>`).join("")}</select>
+        </div>
+        <div class="field"><label>Potentiel logements</label>
+          <input id="f-pot" type="number" value="${opp ? opp.potentielLogements : ""}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Contact</label><input id="f-contact" value="${opp ? opp.contact : ""}"></div>
+        <div class="field"><label>Date de prospection</label>
+          <input id="f-date" type="date" value="${opp ? opp.dateProspection : ""}"></div>
+      </div>
+      <div class="field"><label>Note</label><textarea id="f-note" rows="3">${opp ? opp.note : ""}</textarea></div>
+      <div class="flex gap-8" style="justify-content:flex-end;margin-top:10px;">
+        ${opp ? `<button class="btn btn-danger" onclick="deleteOpp('${opp.id}')">Supprimer</button>` : ""}
+        <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+        <button class="btn btn-primary" onclick="saveOpp(${opp ? `'${opp.id}'` : null})">Enregistrer</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function closeModal() {
+  document.querySelectorAll(".modal-overlay").forEach(m => m.remove());
+}
+
+function saveOpp(id) {
+  const data = {
+    nom: document.getElementById("f-nom").value.trim(),
+    commune: document.getElementById("f-commune").value.trim(),
+    territoire: document.getElementById("f-territoire").value,
+    statut: document.getElementById("f-statut").value,
+    potentielLogements: parseInt(document.getElementById("f-pot").value) || 0,
+    contact: document.getElementById("f-contact").value.trim(),
+    dateProspection: document.getElementById("f-date").value,
+    note: document.getElementById("f-note").value.trim()
+  };
+  if (!data.nom) { alert("Le nom de l'opportunité est requis."); return; }
+
+  if (id) {
+    const opp = DP.opportunites.find(o => o.id === id);
+    Object.assign(opp, data);
+  } else {
+    DP.opportunites.push({ id: dpUid("op"), ...data });
+  }
+  dpPersist();
+  closeModal();
+  render();
+}
+
+function deleteOpp(id) {
+  if (!confirm("Supprimer cette opportunité ?")) return;
+  DP.opportunites = DP.opportunites.filter(o => o.id !== id);
+  dpPersist();
+  closeModal();
+  render();
+}
+</script>
+</body>
+</html>
