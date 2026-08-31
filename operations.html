@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Opérations — DomPilot</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="app.js"></script>
+<script>
+const content = dpRenderShell("operations", "Opérations", "Suivi de l'ensemble des opérations immobilières");
+if (content) render();
+
+function getFilters() {
+  return {
+    phase: document.getElementById("filter-phase")?.value || "",
+    territoire: document.getElementById("filter-territoire")?.value || "",
+    q: document.getElementById("filter-q")?.value?.toLowerCase() || ""
+  };
+}
+
+function render() {
+  content.innerHTML = `
+    <div class="toolbar">
+      <div class="filters">
+        <input id="filter-q" placeholder="Rechercher une opération…" oninput="rerender()">
+        <select id="filter-phase" onchange="rerender()">
+          <option value="">Toutes les phases</option>
+          ${DP.phases.map(p => `<option value="${p}">${p}</option>`).join("")}
+        </select>
+        <select id="filter-territoire" onchange="rerender()">
+          <option value="">Tous les territoires</option>
+          ${DP.territoires.map(t => `<option value="${t}">${t}</option>`).join("")}
+        </select>
+      </div>
+      <button class="btn btn-accent" onclick="window.location.href='operation.html'">+ Nouvelle opération</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table>
+        <thead>
+          <tr>
+            <th>Opération</th><th>Territoire</th><th>Phase</th><th>Logements</th>
+            <th>Budget prév.</th><th>Engagé</th><th>Livraison prévue</th>
+          </tr>
+        </thead>
+        <tbody id="ops-tbody"></tbody>
+      </table>
+    </div>
+  `;
+  rerender();
+}
+
+function rerender() {
+  const f = getFilters();
+  const rows = DP.operations.filter(o =>
+    (!f.phase || o.phase === f.phase) &&
+    (!f.territoire || o.territoire === f.territoire) &&
+    (!f.q || o.nom.toLowerCase().includes(f.q) || o.commune.toLowerCase().includes(f.q))
+  );
+  const tbody = document.getElementById("ops-tbody");
+  if (rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">Aucune opération ne correspond aux filtres.</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(o => `
+    <tr onclick="window.location.href='operation.html?id=${o.id}'">
+      <td><strong>${o.nom}</strong><br><span class="text-muted">${o.commune}</span></td>
+      <td>${o.territoire}</td>
+      <td><span class="badge ${dpPhaseBadgeClass(o.phase)}">${o.phase}</span></td>
+      <td>${o.nbLogements}</td>
+      <td>${dpFormatEUR(o.budgetPrevisionnel)}</td>
+      <td>${dpFormatEUR(o.budgetEngage)}</td>
+      <td>${dpFormatDate(o.dateLivraisonPrevue)}</td>
+    </tr>
+  `).join("");
+}
+</script>
+</body>
+</html>
