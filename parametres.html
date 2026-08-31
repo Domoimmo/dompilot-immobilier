@@ -14,6 +14,12 @@ if (content) render();
 
 function render() {
   const cfg = dpGetGithubConfig() || {};
+  // On relit l'utilisateur courant depuis DP (et pas seulement la session, qui peut être
+  // périmée si le statut admin a changé après la dernière connexion).
+  const session = dpGetSession();
+  const currentUser = DP.utilisateurs.find(u => u.identifiant === session.identifiant) || session;
+  const isAdmin = !!currentUser.isAdmin;
+
   content.innerHTML = `
     <div class="grid-2">
       <div class="card">
@@ -48,31 +54,33 @@ function render() {
       <div class="card">
         <div class="flex-between mb-14">
           <div class="card-title mt-0" style="margin:0;">Utilisateurs</div>
-          <button class="btn btn-sm btn-outline" onclick="addUser()">+ Ajouter</button>
+          ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="addUser()">+ Ajouter</button>` : ""}
         </div>
         <table>
-          <thead><tr><th>Nom</th><th>Identifiant</th><th>Rôle</th><th>Mot de passe</th><th></th></tr></thead>
+          <thead><tr><th>Nom</th><th>Identifiant</th><th>Rôle</th><th>Mot de passe</th>${isAdmin ? "<th></th>" : ""}</tr></thead>
           <tbody>
             ${DP.utilisateurs.map(u => `
               <tr>
-                <td>${u.nom}</td>
+                <td>${u.nom} ${u.isAdmin ? `<span class="badge badge-vert" style="margin-left:6px;">Admin</span>` : ""}</td>
                 <td>${u.identifiant}</td>
                 <td>${u.role}</td>
                 <td>${u.passwordHash
                   ? `<span class="badge badge-vert">Défini</span>`
                   : `<span class="badge badge-orange">À définir (1ère connexion)</span>`}</td>
+                ${isAdmin ? `
                 <td class="flex gap-8">
                   ${u.passwordHash ? `<button class="btn btn-sm btn-outline" onclick="resetUserPassword('${u.id}')">Réinitialiser</button>` : ""}
+                  <button class="btn btn-sm ${u.isAdmin ? 'btn-outline' : 'btn-outline'}" onclick="toggleAdmin('${u.id}')">${u.isAdmin ? "Retirer admin" : "Passer admin"}</button>
                   <button class="btn btn-sm btn-danger" onclick="deleteUser('${u.id}')">Supprimer</button>
-                </td>
+                </td>` : ""}
               </tr>
             `).join("")}
           </tbody>
         </table>
         <div class="text-muted mt-20">
-          Un utilisateur ajouté ici devra faire sa « première connexion » (choix de son mot de passe
-          personnel) directement sur la page de connexion. « Réinitialiser » efface son mot de passe
-          actuel : il devra en choisir un nouveau à sa prochaine connexion.
+          ${isAdmin
+            ? "Un utilisateur ajouté ici devra faire sa « première connexion » (choix de son mot de passe personnel) directement sur la page de connexion. « Réinitialiser » efface son mot de passe actuel : il devra en choisir un nouveau à sa prochaine connexion."
+            : "Seuls les administrateurs peuvent ajouter, modifier ou supprimer des comptes."}
         </div>
       </div>
     </div>
@@ -117,7 +125,27 @@ async function loadNow() {
   if (ok) render();
 }
 
+function currentIsAdmin() {
+  const session = dpGetSession();
+  const u = DP.utilisateurs.find(u => u.identifiant === session.identifiant);
+  return !!(u && u.isAdmin);
+}
+
+function toggleAdmin(id) {
+  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
+  const u = DP.utilisateurs.find(u => u.id === id);
+  if (!u) return;
+  const session = dpGetSession();
+  if (u.identifiant === session.identifiant && u.isAdmin) {
+    if (!confirm("Vous êtes sur le point de retirer vos propres droits admin. Continuer ?")) return;
+  }
+  u.isAdmin = !u.isAdmin;
+  dpPersist();
+  render();
+}
+
 function addUser() {
+  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
   const nom = prompt("Nom complet du nouvel utilisateur :");
   if (!nom) return;
   const identifiant = prompt("Identifiant de connexion (ex. p.durand) :");
@@ -136,6 +164,7 @@ function addUser() {
 }
 
 function resetUserPassword(id) {
+  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
   const u = DP.utilisateurs.find(u => u.id === id);
   if (!u) return;
   if (!confirm(`Réinitialiser le mot de passe de ${u.nom} ? Il/elle devra en choisir un nouveau à la prochaine connexion.`)) return;
@@ -146,6 +175,7 @@ function resetUserPassword(id) {
 }
 
 function deleteUser(id) {
+  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
   const u = DP.utilisateurs.find(u => u.id === id);
   if (!u) return;
   if (!confirm(`Supprimer l'utilisateur ${u.nom} ?`)) return;
