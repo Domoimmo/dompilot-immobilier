@@ -23,7 +23,7 @@ const DP_SEED = {
     { id: "u1", nom: "Directeur du Développement", identifiant: "j.moreau", role: "Direction", passwordHash: null, salt: null },
     { id: "u2", nom: "Responsable de programmes", identifiant: "s.lefevre", role: "Chargé d'opérations", passwordHash: null, salt: null },
     { id: "u3", nom: "Chargée de développement foncier", identifiant: "c.dubois", role: "Développement", passwordHash: null, salt: null },
-    { id: "u4", nom: "Marie Blain", identifiant: "mblain", role: "Chargé d'opérations",
+    { id: "u4", nom: "Marie Blain", identifiant: "mblain", role: "Chargé d'opérations", isAdmin: true,
       passwordHash: "4972461b078710060a97d6525d7bec4ea5afdefa4985dbc845531eb90bf28411",
       salt: "a495f1a9556f5a78637565824c3f8eb6" }
   ],
