@@ -9,7 +9,7 @@
    repo via l'API GitHub (Contents API) avec un Personal Access Token.
    ========================================================================= */
 
-const DP_STORAGE_KEY = "dompilot_data_v1";
+const DP_STORAGE_KEY = "dompilot_data_v2";
 const DP_SESSION_KEY = "dompilot_session_v1";
 
 /* ---------------------------------------------------------------------
