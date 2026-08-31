@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tableau de bord — DomPilot</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="app.js"></script>
+<script>
+const content = dpRenderShell("dashboard", "Tableau de bord", "Vue d'ensemble du portefeuille d'opérations");
+if (content) render();
+
+function render() {
+  const ops = DP.operations;
+  const nbOps = ops.length;
+  const nbLogements = ops.reduce((s, o) => s + (o.nbLogements || 0), 0);
+  const budgetTotal = ops.reduce((s, o) => s + (o.budgetPrevisionnel || 0), 0);
+  const budgetEngage = ops.reduce((s, o) => s + (o.budgetEngage || 0), 0);
+  const tauxEngagement = budgetTotal ? Math.round((budgetEngage / budgetTotal) * 100) : 0;
+  const nbOpportunites = DP.opportunites.filter(o => !["Sans suite"].includes(o.statut)).length;
+
+  // Répartition par phase
+  const parPhase = {};
+  DP.phases.forEach(p => parPhase[p] = 0);
+  ops.forEach(o => parPhase[o.phase] = (parPhase[o.phase] || 0) + 1);
+
+  // Répartition par territoire
+  const parTerritoire = {};
+  DP.territoires.forEach(t => parTerritoire[t] = 0);
+  ops.forEach(o => parTerritoire[o.territoire] = (parTerritoire[o.territoire] || 0) + 1);
+
+  // Répartition par nature de produit
+  const parNature = {};
+  DP.naturesProduit.forEach(n => parNature[n] = 0);
+  ops.forEach(o => parNature[o.natureProduit] = (parNature[o.natureProduit] || 0) + 1);
+
+  const maxPhase = Math.max(1, ...Object.values(parPhase));
+  const maxTerr = Math.max(1, ...Object.values(parTerritoire));
+
+  // Opérations à échéance proche (livraison < 6 mois) ou jalon en cours en retard simulé
+  const alertes = ops
+    .filter(o => o.phase !== "Clôturé")
+    .map(o => {
+      const jalonEnCours = (o.jalons || []).find(j => j.statut === "encours");
+      return { op: o, jalon: jalonEnCours };
+    })
+    .filter(x => x.jalon);
+
+  content.innerHTML = `
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Opérations actives</div>
+        <div class="kpi-value">${nbOps}</div>
+        <div class="kpi-delta">${nbOpportunites} opportunités en pipe</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Logements en portefeuille</div>
+        <div class="kpi-value">${nbLogements}</div>
+        <div class="kpi-delta">Toutes phases confondues</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Budget prévisionnel total</div>
+        <div class="kpi-value">${dpFormatEUR(budgetTotal)}</div>
+        <div class="kpi-delta">${dpFormatEUR(budgetEngage)} engagés</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Taux d'engagement</div>
+        <div class="kpi-value">${tauxEngagement}%</div>
+        <div class="progress-bar" style="margin-top:8px;">
+          <div class="progress-bar-fill" style="width:${tauxEngagement}%;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Répartition des opérations par phase</div>
+        ${Object.entries(parPhase).map(([phase, n]) => `
+          <div style="margin-bottom:10px;">
+            <div class="flex-between" style="font-size:12.5px;margin-bottom:4px;">
+              <span>${phase}</span><span class="text-muted">${n}</span>
+            </div>
+            <div class="progress-bar"><div class="progress-bar-fill" style="width:${(n/maxPhase)*100}%;background:var(--bleu);"></div></div>
+          </div>
+        `).join("")}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Points d'attention</div>
+        ${alertes.length === 0 ? `<div class="empty-state">Aucune alerte de jalon en cours.</div>` :
+          alertes.map(a => `
+            <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
+              <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${a.op.nom}</div>
+              <div class="text-muted">${a.jalon.libelle} — échéance ${dpFormatDate(a.jalon.date)}</div>
+            </div>
+          `).join("")
+        }
+      </div>
+    </div>
+
+    <div class="grid-2 mt-20">
+      <div class="card">
+        <div class="card-title">Répartition par territoire</div>
+        ${Object.entries(parTerritoire).map(([t, n]) => `
+          <div style="margin-bottom:10px;">
+            <div class="flex-between" style="font-size:12.5px;margin-bottom:4px;">
+              <span>${t}</span><span class="text-muted">${n}</span>
+            </div>
+            <div class="progress-bar"><div class="progress-bar-fill" style="width:${(n/maxTerr)*100}%;background:var(--accent);"></div></div>
+          </div>
+        `).join("")}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Répartition par nature de produit</div>
+        ${Object.entries(parNature).map(([n, c]) => `
+          <div class="flex-between" style="padding:8px 0;border-bottom:1px solid var(--gris-bordure);font-size:13px;">
+            <span>${n}</span><span class="badge badge-bleu">${c}</span>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+</script>
+</body>
+</html>
