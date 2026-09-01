@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestion locative — DomPilot</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="app.js?v=4"></script>
+<script>
+const content = dpRenderShell("locatif", "Gestion locative", "Baux, locataires et échéances du patrimoine en exploitation");
+if (content) render();
+
+function allBauxFlat() {
+  return DP.operations.flatMap(o => (o.baux || []).map((b, idx) => ({ op: o, bail: b, idx })));
+}
+
+function render() {
+  const opsExploitation = DP.operations.filter(o => o.phase === "Exploitation");
+  const surfaceTotale = opsExploitation.reduce((s, o) => s + (o.surfaceLocative || 0), 0);
+  const surfaceLouee = opsExploitation.reduce((s, o) => s + dpSurfaceLouee(o), 0);
+  const tauxOccupation = surfaceTotale ? Math.round((surfaceLouee / surfaceTotale) * 100) : null;
+  const loyersAnnualises = opsExploitation.reduce((s, o) => s + dpLoyerAnnuelTotal(o), 0);
+
+  const flatBaux = allBauxFlat();
+  const echeancesProches = flatBaux
+    .filter(x => x.bail.statut !== "Vacant")
+    .map(x => ({ ...x, jours: dpJoursAvantEcheance(x.bail.dateEcheance) }))
+    .filter(x => x.jours !== null && x.jours <= 182)
+    .sort((a, b) => a.jours - b.jours);
+
+  content.innerHTML = `
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Actifs en exploitation</div><div class="kpi-value">${opsExploitation.length}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Taux d'occupation global</div>
+        <div class="kpi-value">${tauxOccupation === null ? "—" : tauxOccupation + "%"}</div>
+        ${tauxOccupation !== null ? `<div class="progress-bar" style="margin-top:8px;"><div class="progress-bar-fill" style="width:${tauxOccupation}%;"></div></div>` : ""}
+      </div>
+      <div class="kpi-card"><div class="kpi-label">Surface louée / totale</div>
+        <div class="kpi-value" style="font-size:20px;">${dpFormatSurface(surfaceLouee)}</div>
+        <div class="kpi-delta">sur ${dpFormatSurface(surfaceTotale)}</div>
+      </div>
+      <div class="kpi-card"><div class="kpi-label">Loyers annualisés (HT)</div><div class="kpi-value" style="font-size:20px;">${dpFormatEUR(loyersAnnualises)}</div></div>
+    </div>
+
+    <div class="card mb-14">
+      <div class="card-title">Échéances à moins de 6 mois</div>
+      ${echeancesProches.length === 0 ? `<div class="empty-state">Aucune échéance de bail dans les 6 prochains mois.</div>` : `
+      <table>
+        <thead><tr><th>Opération</th><th>Locataire</th><th>Échéance</th><th>Délai</th><th>Statut</th></tr></thead>
+        <tbody>
+          ${echeancesProches.map(x => `
+            <tr onclick="window.location.href='operation.html?id=${x.op.id}'">
+              <td>${x.op.nom}</td>
+              <td>${x.bail.locataire}</td>
+              <td>${dpFormatDate(x.bail.dateEcheance)}</td>
+              <td>${x.jours < 0 ? "Dépassée" : `${x.jours} j`}</td>
+              <td><span class="badge ${dpStatutBailBadgeClass(x.bail.statut)}">${x.bail.statut}</span></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>`}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Tous les baux</div>
+      ${flatBaux.length === 0 ? `<div class="empty-state">Aucun bail enregistré pour l'instant. Ajoutez-en depuis la fiche d'une opération (onglet « Locataires &amp; baux »).</div>` : `
+      <table>
+        <thead><tr><th>Opération</th><th>Locataire</th><th>Surface</th><th>Loyer annuel HT</th><th>Type</th><th>Échéance</th><th>Statut</th></tr></thead>
+        <tbody>
+          ${flatBaux.map(x => `
+            <tr onclick="window.location.href='operation.html?id=${x.op.id}'">
+              <td>${x.op.nom}</td>
+              <td>${x.bail.locataire}</td>
+              <td>${dpFormatSurface(x.bail.surfaceM2)}</td>
+              <td>${dpFormatEUR(x.bail.loyerAnnuelHT)}</td>
+              <td>${x.bail.typeBail || "—"}</td>
+              <td>${dpFormatDate(x.bail.dateEcheance)}</td>
+              <td><span class="badge ${dpStatutBailBadgeClass(x.bail.statut)}">${x.bail.statut}</span></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>`}
+    </div>
+  `;
+}
+</script>
+</body>
+</html>
