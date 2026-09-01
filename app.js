@@ -68,6 +68,16 @@ const DP_SEED = {
   periodicitesContrat: ["Mensuel", "Trimestriel", "Annuel"],
   statutsContrat: ["Actif", "À renouveler", "Résilié"],
 
+  /* --- Travaux / aménagement (locaux propres ou loués) --- */
+  typesTravaux: [
+    "Gros entretien", "Aménagement locataire", "Mise aux normes",
+    "Rénovation énergétique", "Sinistre / réparation", "Réaménagement locaux internes", "Autre"
+  ],
+  statutsTravaux: ["Planifié", "En cours", "Terminé"],
+
+  // Distingue les locaux occupés par Domofrance elle-même de ceux loués à des tiers.
+  usagesOperation: ["Location à des tiers", "Occupation interne Domofrance", "Mixte"],
+
   /* --- Flex Office (bureaux internes Domofrance) --- */
   // Chaque site regroupe des postes de travail et des salles de réunion réservables.
   flexOfficeSites: [],
@@ -332,6 +342,15 @@ function dpStatutRisqueBadgeClass(statut) {
 }
 function dpStatutContratBadgeClass(statut) {
   return { "Actif": "badge-vert", "À renouveler": "badge-orange", "Résilié": "badge-gris" }[statut] || "badge-gris";
+}
+function dpStatutTravauxBadgeClass(statut) {
+  return { "Planifié": "badge-gris", "En cours": "badge-orange", "Terminé": "badge-vert" }[statut] || "badge-gris";
+}
+function dpBudgetTravauxPrevu(op) {
+  return (op.travaux || []).reduce((s, t) => s + (t.budgetPrevu || 0), 0);
+}
+function dpBudgetTravauxRealise(op) {
+  return (op.travaux || []).reduce((s, t) => s + (t.budgetRealise || 0), 0);
 }
 // --- Flex Office ---
 function dpFlexReservationFor(siteId, type, ressourceId, date) {
