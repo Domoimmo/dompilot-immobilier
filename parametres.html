@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 <script>
 const content = dpRenderShell("parametres", "Paramètres", "Connexion GitHub, utilisateurs et référentiels");
 if (content) render();
@@ -101,6 +101,41 @@ function render() {
     </div>
 
     <div class="card mt-20">
+      <div class="flex-between mb-14">
+        <div class="card-title mt-0" style="margin:0;">Flex Office — Sites, postes &amp; salles</div>
+        ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="addFlexSite()">+ Ajouter un site</button>` : ""}
+      </div>
+      ${DP.flexOfficeSites.length === 0 ? `<div class="empty-state">Aucun site configuré.</div>` : DP.flexOfficeSites.map(s => `
+        <div style="border:1px solid var(--gris-bordure);border-radius:9px;padding:12px 14px;margin-bottom:10px;">
+          <div class="flex-between mb-14">
+            <strong style="color:var(--bleu-fonce);">${s.nom}</strong>
+            ${isAdmin ? `<button class="btn btn-sm btn-danger" onclick="deleteFlexSite('${s.id}')">Supprimer le site</button>` : ""}
+          </div>
+          <div class="grid-2">
+            <div>
+              <div class="flex-between mb-14"><span class="text-muted">Postes (${(s.postes||[]).length})</span>
+                ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="addPoste('${s.id}')">+ Poste</button>` : ""}</div>
+              ${(s.postes||[]).map(p => `
+                <div class="flex-between" style="padding:5px 0;font-size:13px;">
+                  <span>${p.nom}</span>
+                  ${isAdmin ? `<button class="btn btn-sm btn-danger" onclick="deletePoste('${s.id}','${p.id}')">✕</button>` : ""}
+                </div>`).join("") || `<div class="text-muted">Aucun poste.</div>`}
+            </div>
+            <div>
+              <div class="flex-between mb-14"><span class="text-muted">Salles de réunion (${(s.salles||[]).length})</span>
+                ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="addSalle('${s.id}')">+ Salle</button>` : ""}</div>
+              ${(s.salles||[]).map(sa => `
+                <div class="flex-between" style="padding:5px 0;font-size:13px;">
+                  <span>${sa.nom} ${sa.capacite ? `(${sa.capacite} pers.)` : ""}</span>
+                  ${isAdmin ? `<button class="btn btn-sm btn-danger" onclick="deleteSalle('${s.id}','${sa.id}')">✕</button>` : ""}
+                </div>`).join("") || `<div class="text-muted">Aucune salle.</div>`}
+            </div>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+
+    <div class="card mt-20">
       <div class="card-title">Réinitialisation locale (avancé)</div>
       <div class="text-muted mb-14">
         Efface le cache local de ce navigateur (retour au jeu de données vide) et recharge depuis le
@@ -133,6 +168,54 @@ function currentIsAdmin() {
   const session = dpGetSession();
   const u = DP.utilisateurs.find(u => u.identifiant === session.identifiant);
   return !!(u && u.isAdmin);
+}
+
+function addFlexSite() {
+  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
+  const nom = prompt("Nom du site (ex. Siège Domofrance Bordeaux) :");
+  if (!nom) return;
+  DP.flexOfficeSites.push({ id: dpUid("site"), nom: nom.trim(), postes: [], salles: [] });
+  dpPersist(); render();
+}
+function deleteFlexSite(id) {
+  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
+  if (!confirm("Supprimer ce site et toutes ses réservations liées ?")) return;
+  DP.flexOfficeSites = DP.flexOfficeSites.filter(s => s.id !== id);
+  DP.flexOfficeReservations = DP.flexOfficeReservations.filter(r => r.siteId !== id);
+  dpPersist(); render();
+}
+function addPoste(siteId) {
+  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
+  const nom = prompt("Nom / numéro du poste (ex. Poste 12) :");
+  if (!nom) return;
+  const site = DP.flexOfficeSites.find(s => s.id === siteId);
+  site.postes = site.postes || [];
+  site.postes.push({ id: dpUid("poste"), nom: nom.trim() });
+  dpPersist(); render();
+}
+function deletePoste(siteId, posteId) {
+  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
+  const site = DP.flexOfficeSites.find(s => s.id === siteId);
+  site.postes = site.postes.filter(p => p.id !== posteId);
+  DP.flexOfficeReservations = DP.flexOfficeReservations.filter(r => !(r.siteId === siteId && r.type === "poste" && r.ressourceId === posteId));
+  dpPersist(); render();
+}
+function addSalle(siteId) {
+  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
+  const nom = prompt("Nom de la salle (ex. Salle Garonne) :");
+  if (!nom) return;
+  const capacite = parseInt(prompt("Capacité (nombre de personnes), optionnel :") || "") || null;
+  const site = DP.flexOfficeSites.find(s => s.id === siteId);
+  site.salles = site.salles || [];
+  site.salles.push({ id: dpUid("salle"), nom: nom.trim(), capacite });
+  dpPersist(); render();
+}
+function deleteSalle(siteId, salleId) {
+  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
+  const site = DP.flexOfficeSites.find(s => s.id === siteId);
+  site.salles = site.salles.filter(s => s.id !== salleId);
+  DP.flexOfficeReservations = DP.flexOfficeReservations.filter(r => !(r.siteId === siteId && r.type === "salle" && r.ressourceId === salleId));
+  dpPersist(); render();
 }
 
 function toggleAdmin(id) {
