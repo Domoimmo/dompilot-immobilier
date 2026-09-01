@@ -28,15 +28,21 @@ const DP_SEED = {
 
   territoires: ["Bordeaux Métropole", "Bassin d'Arcachon", "Libournais", "Sud Gironde", "Landes"],
 
-  typesOperation: ["Construction neuve", "Acquisition-amélioration", "Réhabilitation", "Démolition"],
-  naturesProduit: ["Logement social (PLUS/PLAI)", "Accession sociale", "Locatif intermédiaire (LLI)", "Tertiaire"],
+  typesOperation: ["Construction neuve", "Acquisition-amélioration", "Restructuration / Repositionnement", "Réhabilitation", "Démolition"],
+  naturesProduit: ["Bureaux", "Commerces", "Locaux d'activité / Logistique", "Mixte tertiaire"],
 
-  phases: ["Développement", "Montage", "Travaux", "Livraison", "Clôturé"],
+  // "Exploitation" = actif livré et passé en gestion locative (baux actifs, suivi de la vacance).
+  // "Clôturé" = actif cédé / sorti du patrimoine suivi.
+  phases: ["Développement", "Montage", "Travaux", "Livraison", "Exploitation", "Clôturé"],
 
   jalonsTypes: [
     "Signature foncière", "Dépôt PC", "Obtention PC purgé", "Consultation entreprises",
-    "Ordre de service travaux", "Livraison"
+    "Ordre de service travaux", "Lancement commercialisation locative", "Livraison"
   ],
+
+  typesBail: ["Bail commercial 3/6/9", "Bail professionnel", "Bail dérogatoire (< 3 ans)", "Convention d'occupation précaire"],
+  indexations: ["ILAT", "ICC", "ILC"],
+  statutsBail: ["Actif", "Préavis donné", "En négociation renouvellement", "Vacant"],
 
   /* --- Pipeline développement (module "Développement") --- */
   // Vide en version production : les opportunités réelles sont saisies depuis l'app.
@@ -44,11 +50,13 @@ const DP_SEED = {
 
   /* --- Opérations en cours (module "Suivi projet") --- */
   // Vide en version production : les opérations réelles sont saisies depuis l'app.
+  // Chaque opération peut porter un tableau `baux` une fois en phase "Exploitation"
+  // (voir module "Gestion locative").
   operations: [],
 
   postesBudget: [
     "Charge foncière", "Frais notariés", "Études (géotech, sols, diag)", "Honoraires MOE",
-    "Travaux VRD", "Travaux bâtiment", "Aléas / imprévus", "Frais de gestion / commercialisation"
+    "Travaux VRD", "Travaux bâtiment", "Aléas / imprévus", "Frais de gestion / commercialisation locative"
   ]
 };
 
@@ -218,7 +226,8 @@ function dpPhaseBadgeClass(phase) {
     "Montage": "badge-bleu",
     "Travaux": "badge-orange",
     "Livraison": "badge-vert",
-    "Clôturé": "badge-vert"
+    "Exploitation": "badge-vert",
+    "Clôturé": "badge-gris"
   }[phase] || "badge-gris";
 }
 function dpStatutOppBadgeClass(statut) {
@@ -230,6 +239,37 @@ function dpStatutOppBadgeClass(statut) {
     "Sans suite": "badge-rouge"
   }[statut] || "badge-gris";
 }
+function dpFormatSurface(m2) {
+  if (m2 === null || m2 === undefined || isNaN(m2)) return "—";
+  return new Intl.NumberFormat("fr-FR").format(m2) + " m²";
+}
+function dpStatutBailBadgeClass(statut) {
+  return {
+    "Actif": "badge-vert",
+    "Préavis donné": "badge-rouge",
+    "En négociation renouvellement": "badge-orange",
+    "Vacant": "badge-gris"
+  }[statut] || "badge-gris";
+}
+// Nombre de jours avant une échéance de bail (négatif = déjà dépassée).
+function dpJoursAvantEcheance(dateEcheance) {
+  if (!dateEcheance) return null;
+  const diffMs = new Date(dateEcheance) - new Date();
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+}
+// Surface totale louée (baux actifs) d'une opération.
+function dpSurfaceLouee(op) {
+  return (op.baux || []).filter(b => b.statut !== "Vacant").reduce((s, b) => s + (b.surfaceM2 || 0), 0);
+}
+// Taux d'occupation (%) d'une opération en exploitation.
+function dpTauxOccupation(op) {
+  if (!op.surfaceLocative) return null;
+  return Math.round((dpSurfaceLouee(op) / op.surfaceLocative) * 100);
+}
+// Loyer annuel total (baux actifs) d'une opération.
+function dpLoyerAnnuelTotal(op) {
+  return (op.baux || []).filter(b => b.statut !== "Vacant").reduce((s, b) => s + (b.loyerAnnuelHT || 0), 0);
+}
 
 /* ---------------------------------------------------------------------
    6) LAYOUT PARTAGÉ (sidebar + topbar)
@@ -238,6 +278,7 @@ const DP_NAV = [
   { href: "dashboard.html", icon: "📊", label: "Tableau de bord", key: "dashboard" },
   { href: "developpement.html", icon: "🧭", label: "Développement", key: "developpement" },
   { href: "operations.html", icon: "🏗", label: "Opérations", key: "operations" },
+  { href: "locatif.html", icon: "🔑", label: "Gestion locative", key: "locatif" },
   { href: "parametres.html", icon: "⚙", label: "Paramètres", key: "parametres" }
 ];
 
