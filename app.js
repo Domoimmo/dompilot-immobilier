@@ -299,6 +299,16 @@ function dpStatutConformiteBadgeClass(statut) {
 function dpNiveauRisqueBadgeClass(niveau) {
   return { "Faible": "badge-vert", "Moyen": "badge-orange", "Élevé": "badge-rouge" }[niveau] || "badge-gris";
 }
+function dpPhaseColor(phase) {
+  return {
+    "Développement": "#8393a3",
+    "Montage": "#0f4c81",
+    "Travaux": "#e08a2c",
+    "Livraison": "#1f8a70",
+    "Exploitation": "#1f8a70",
+    "Clôturé": "#8393a3"
+  }[phase] || "#8393a3";
+}
 function dpStatutRisqueBadgeClass(statut) {
   return { "Identifié": "badge-rouge", "En traitement": "badge-orange", "Maîtrisé": "badge-vert" }[statut] || "badge-gris";
 }
@@ -310,6 +320,7 @@ const DP_NAV = [
   { href: "dashboard.html", icon: "📊", label: "Tableau de bord", key: "dashboard" },
   { href: "developpement.html", icon: "🧭", label: "Développement", key: "developpement" },
   { href: "operations.html", icon: "🏗", label: "Opérations", key: "operations" },
+  { href: "carte.html", icon: "🗺", label: "Carte", key: "carte" },
   { href: "locatif.html", icon: "🔑", label: "Gestion locative", key: "locatif" },
   { href: "parametres.html", icon: "⚙", label: "Paramètres", key: "parametres" }
 ];
