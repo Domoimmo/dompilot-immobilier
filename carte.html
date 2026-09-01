@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carte — DomPilot</title>
+<link rel="stylesheet" href="style.css">
+<!-- Leaflet.js + OpenStreetMap : cartographie 100% gratuite, sans clé API. -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  #dp-map { width: 100%; height: calc(100vh - 220px); min-height: 420px; border-radius: 10px; border: 1px solid var(--gris-bordure); }
+  .leaflet-popup-content { font-family: inherit; font-size: 13px; }
+  .map-legend { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; font-size:12.5px; color:#5c6b7a; }
+  .map-legend .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+</style>
+</head>
+<body>
+<script src="app.js?v=6"></script>
+<script>
+const content = dpRenderShell("carte", "Carte", "Localisation du patrimoine (données OpenStreetMap)");
+if (content) render();
+
+function render() {
+  const opsAvecCoords = DP.operations.filter(o => o.latitude && o.longitude);
+
+  content.innerHTML = `
+    <div class="map-legend">
+      ${DP.phases.map(p => `<span><span class="dot" style="background:${dpPhaseColor(p)};"></span>${p}</span>`).join("")}
+    </div>
+    ${opsAvecCoords.length === 0
+      ? `<div class="empty-state">Aucune opération géolocalisée pour l'instant. Renseignez la latitude/longitude
+          (ou utilisez le bouton « Localiser automatiquement ») depuis l'onglet Infos générales d'une fiche opération.</div>`
+      : `<div id="dp-map"></div>`
+    }
+    <div class="text-muted mt-20">Fond de carte © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors — gratuit, sans clé API.</div>
+  `;
+
+  if (opsAvecCoords.length === 0) return;
+
+  const map = L.map("dp-map");
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors"
+  }).addTo(map);
+
+  const markers = [];
+  opsAvecCoords.forEach(o => {
+    const marker = L.circleMarker([o.latitude, o.longitude], {
+      radius: 9, color: "#fff", weight: 2, fillColor: dpPhaseColor(o.phase), fillOpacity: 0.9
+    }).addTo(map);
+    marker.bindPopup(`
+      <strong>${o.nom}</strong><br>
+      ${o.commune} · ${o.territoire}<br>
+      Phase : ${o.phase}<br>
+      ${dpFormatSurface(o.surfaceLocative)}<br>
+      <a href="operation.html?id=${o.id}">Voir la fiche →</a>
+    `);
+    markers.push(marker);
+  });
+
+  if (markers.length === 1) {
+    map.setView(markers[0].getLatLng(), 13);
+  } else {
+    const group = L.featureGroup(markers);
+    map.fitBounds(group.getBounds().pad(0.2));
+  }
+}
+</script>
+</body>
+</html>
