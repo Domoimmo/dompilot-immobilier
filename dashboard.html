@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 <script>
 const content = dpRenderShell("dashboard", "Tableau de bord", "Vue d'ensemble du portefeuille d'opérations");
 if (content) render();
@@ -33,6 +33,11 @@ function render() {
     .filter(b => b.statut !== "Vacant")
     .map(b => ({ op: o, bail: b, jours: dpJoursAvantEcheance(b.dateEcheance) }))
   ).filter(x => x.jours !== null && x.jours <= 182);
+
+  // Diagnostics de conformité à échéance proche ou non conformes
+  const conformiteAlertes = ops.flatMap(o => (o.conformite || [])
+    .map(c => ({ op: o, item: c, jours: dpJoursAvantEcheance(c.dateEcheance) }))
+  ).filter(x => x.item.statut === "Non conforme" || (x.jours !== null && x.jours <= 182));
 
   // Répartition par phase
   const parPhase = {};
@@ -112,7 +117,7 @@ function render() {
 
       <div class="card">
         <div class="card-title">Points d'attention</div>
-        ${alertes.length === 0 && echeancesProches.length === 0 ? `<div class="empty-state">Aucune alerte en cours.</div>` : ""}
+        ${alertes.length === 0 && echeancesProches.length === 0 && conformiteAlertes.length === 0 ? `<div class="empty-state">Aucune alerte en cours.</div>` : ""}
         ${alertes.map(a => `
             <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
               <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${a.op.nom}</div>
@@ -124,6 +129,13 @@ function render() {
             <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
               <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${x.op.nom} — ${x.bail.locataire}</div>
               <div class="text-muted">Échéance de bail ${x.jours < 0 ? "dépassée" : `dans ${x.jours} j`} (${dpFormatDate(x.bail.dateEcheance)})</div>
+            </div>
+          `).join("")
+        }
+        ${conformiteAlertes.map(x => `
+            <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
+              <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${x.op.nom} — ${x.item.libelle}</div>
+              <div class="text-muted">${x.item.statut === "Non conforme" ? "Non conforme" : `Échéance ${x.jours < 0 ? "dépassée" : `dans ${x.jours} j`}`} (${dpFormatDate(x.item.dateEcheance)})</div>
             </div>
           `).join("")
         }
