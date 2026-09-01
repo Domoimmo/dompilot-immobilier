@@ -44,6 +44,18 @@ const DP_SEED = {
   indexations: ["ILAT", "ICC", "ILC"],
   statutsBail: ["Actif", "Préavis donné", "En négociation renouvellement", "Vacant"],
 
+  /* --- Conformité réglementaire (inspiré du module Real Estate Camileia) --- */
+  typesConformite: [
+    "Diagnostic amiante", "Diagnostic plomb", "DPE", "Décret tertiaire (BACS)",
+    "Contrôle accessibilité ERP", "Contrôle ascenseur", "Désenfumage",
+    "Vérification électrique", "Registre de sécurité incendie", "Autre"
+  ],
+  statutsConformite: ["À jour", "À renouveler", "Non conforme"],
+
+  /* --- Registre de risques --- */
+  niveauxRisque: ["Faible", "Moyen", "Élevé"],
+  statutsRisque: ["Identifié", "En traitement", "Maîtrisé"],
+
   /* --- Pipeline développement (module "Développement") --- */
   // Vide en version production : les opportunités réelles sont saisies depuis l'app.
   opportunites: [],
@@ -269,6 +281,26 @@ function dpTauxOccupation(op) {
 // Loyer annuel total (baux actifs) d'une opération.
 function dpLoyerAnnuelTotal(op) {
   return (op.baux || []).filter(b => b.statut !== "Vacant").reduce((s, b) => s + (b.loyerAnnuelHT || 0), 0);
+}
+// Taux de rendement locatif brut (%) = loyers annuels / valeur vénale.
+function dpTRLB(op) {
+  if (!op.valeurVenale) return null;
+  return Math.round((dpLoyerAnnuelTotal(op) / op.valeurVenale) * 1000) / 10;
+}
+// Taux de rendement locatif net (%) = (loyers - charges non récupérables) / valeur vénale.
+function dpTRLN(op) {
+  if (!op.valeurVenale) return null;
+  const net = dpLoyerAnnuelTotal(op) - (op.chargesNonRecuperablesAnnuelles || 0);
+  return Math.round((net / op.valeurVenale) * 1000) / 10;
+}
+function dpStatutConformiteBadgeClass(statut) {
+  return { "À jour": "badge-vert", "À renouveler": "badge-orange", "Non conforme": "badge-rouge" }[statut] || "badge-gris";
+}
+function dpNiveauRisqueBadgeClass(niveau) {
+  return { "Faible": "badge-vert", "Moyen": "badge-orange", "Élevé": "badge-rouge" }[niveau] || "badge-gris";
+}
+function dpStatutRisqueBadgeClass(statut) {
+  return { "Identifié": "badge-rouge", "En traitement": "badge-orange", "Maîtrisé": "badge-vert" }[statut] || "badge-gris";
 }
 
 /* ---------------------------------------------------------------------
