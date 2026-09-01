@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 <script>
 const content = dpRenderShell("operations", "Opérations", "Suivi de l'ensemble des opérations immobilières");
 if (content) render();
@@ -40,8 +40,8 @@ function render() {
       <table>
         <thead>
           <tr>
-            <th>Opération</th><th>Territoire</th><th>Phase</th><th>Logements</th>
-            <th>Budget prév.</th><th>Engagé</th><th>Livraison prévue</th>
+            <th>Opération</th><th>Territoire</th><th>Phase</th><th>Surface</th>
+            <th>Budget prév.</th><th>Engagé</th><th>Occupation</th><th>Livraison prévue</th>
           </tr>
         </thead>
         <tbody id="ops-tbody"></tbody>
@@ -60,7 +60,7 @@ function rerender() {
   );
   const tbody = document.getElementById("ops-tbody");
   if (rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">Aucune opération ne correspond aux filtres.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">Aucune opération ne correspond aux filtres.</div></td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(o => `
@@ -68,9 +68,10 @@ function rerender() {
       <td><strong>${o.nom}</strong><br><span class="text-muted">${o.commune}</span></td>
       <td>${o.territoire}</td>
       <td><span class="badge ${dpPhaseBadgeClass(o.phase)}">${o.phase}</span></td>
-      <td>${o.nbLogements}</td>
+      <td>${dpFormatSurface(o.surfaceLocative)}</td>
       <td>${dpFormatEUR(o.budgetPrevisionnel)}</td>
       <td>${dpFormatEUR(o.budgetEngage)}</td>
+      <td>${o.phase === "Exploitation" ? (dpTauxOccupation(o) ?? "—") + "%" : "—"}</td>
       <td>${dpFormatDate(o.dateLivraisonPrevue)}</td>
     </tr>
   `).join("");
