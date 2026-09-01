@@ -11,6 +11,7 @@ Application de pilotage des opérations immobilières, construite sur le même s
 | Développement | `developpement.html` | Développement (pipeline d'opportunités, vue kanban) |
 | Opérations (liste) | `operations.html` | Suivi projet (portefeuille) |
 | Fiche opération | `operation.html?id=...` | Suivi projet (fiche détaillée : infos, planning/jalons, budget, tâches/CR) |
+| Carte | `carte.html` | Cartographie patrimoniale (Camileia) — via Leaflet.js + OpenStreetMap, gratuit |
 | Paramètres | `parametres.html` | Administration + connexion GitHub |
 
 ## Fonctionnement
@@ -30,6 +31,16 @@ DomPilot est une application 100% statique (aucun serveur applicatif). Conséque
   privé, permission Contents: Read/write, avec une expiration courte à renouveler.
 - Pour un usage à plus grande échelle ou des données très sensibles, prévoir à terme un vrai
   backend d'authentification (SSO / Azure AD Domofrance) plutôt que ce mécanisme client-only.
+
+## Cartographie
+
+La page *Carte* utilise **Leaflet.js + OpenStreetMap**, entièrement gratuit et sans clé API
+(contrairement à Google Maps). Chaque opération peut être géolocalisée manuellement (latitude/
+longitude) ou automatiquement via le bouton « Localiser automatiquement depuis la commune », qui
+interroge l'API de géocodage gratuite **Nominatim** (OpenStreetMap). Nominatim impose une limite
+d'usage raisonnable (~1 requête/seconde, pas d'automatisation massive) — largement suffisant pour
+un usage manuel occasionnel comme ici. Voir sa politique d'usage :
+https://operations.osmfoundation.org/policies/nominatim/
 
 ## Déploiement (identique à GESTOCK / DomAlerte)
 
