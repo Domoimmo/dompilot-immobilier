@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 <script>
 const content = dpRenderShell("dashboard", "Tableau de bord", "Vue d'ensemble du portefeuille d'opérations");
 if (content) render();
@@ -15,11 +15,24 @@ if (content) render();
 function render() {
   const ops = DP.operations;
   const nbOps = ops.length;
-  const nbLogements = ops.reduce((s, o) => s + (o.nbLogements || 0), 0);
+  const surfaceTotale = ops.reduce((s, o) => s + (o.surfaceLocative || 0), 0);
   const budgetTotal = ops.reduce((s, o) => s + (o.budgetPrevisionnel || 0), 0);
   const budgetEngage = ops.reduce((s, o) => s + (o.budgetEngage || 0), 0);
   const tauxEngagement = budgetTotal ? Math.round((budgetEngage / budgetTotal) * 100) : 0;
   const nbOpportunites = DP.opportunites.filter(o => !["Sans suite"].includes(o.statut)).length;
+
+  // Patrimoine en exploitation : taux d'occupation moyen et loyers annualisés
+  const opsExploitation = ops.filter(o => o.phase === "Exploitation" && o.surfaceLocative);
+  const surfaceExploitation = opsExploitation.reduce((s, o) => s + (o.surfaceLocative || 0), 0);
+  const surfaceLoueeTotale = opsExploitation.reduce((s, o) => s + dpSurfaceLouee(o), 0);
+  const tauxOccupationMoyen = surfaceExploitation ? Math.round((surfaceLoueeTotale / surfaceExploitation) * 100) : null;
+  const loyersAnnualises = opsExploitation.reduce((s, o) => s + dpLoyerAnnuelTotal(o), 0);
+
+  // Échéances de baux à moins de 6 mois (toutes opérations en exploitation)
+  const echeancesProches = opsExploitation.flatMap(o => (o.baux || [])
+    .filter(b => b.statut !== "Vacant")
+    .map(b => ({ op: o, bail: b, jours: dpJoursAvantEcheance(b.dateEcheance) }))
+  ).filter(x => x.jours !== null && x.jours <= 182);
 
   // Répartition par phase
   const parPhase = {};
@@ -56,9 +69,19 @@ function render() {
         <div class="kpi-delta">${nbOpportunites} opportunités en pipe</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Logements en portefeuille</div>
-        <div class="kpi-value">${nbLogements}</div>
+        <div class="kpi-label">Surface en portefeuille</div>
+        <div class="kpi-value">${dpFormatSurface(surfaceTotale)}</div>
         <div class="kpi-delta">Toutes phases confondues</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Taux d'occupation moyen</div>
+        <div class="kpi-value">${tauxOccupationMoyen === null ? "—" : tauxOccupationMoyen + "%"}</div>
+        <div class="kpi-delta">${opsExploitation.length} actif${opsExploitation.length>1?"s":""} en exploitation</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Loyers annualisés</div>
+        <div class="kpi-value" style="font-size:22px;">${dpFormatEUR(loyersAnnualises)}</div>
+        <div class="kpi-delta">Baux actifs uniquement</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Budget prévisionnel total</div>
@@ -89,11 +112,18 @@ function render() {
 
       <div class="card">
         <div class="card-title">Points d'attention</div>
-        ${alertes.length === 0 ? `<div class="empty-state">Aucune alerte de jalon en cours.</div>` :
-          alertes.map(a => `
+        ${alertes.length === 0 && echeancesProches.length === 0 ? `<div class="empty-state">Aucune alerte en cours.</div>` : ""}
+        ${alertes.map(a => `
             <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
               <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${a.op.nom}</div>
               <div class="text-muted">${a.jalon.libelle} — échéance ${dpFormatDate(a.jalon.date)}</div>
+            </div>
+          `).join("")
+        }
+        ${echeancesProches.map(x => `
+            <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
+              <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${x.op.nom} — ${x.bail.locataire}</div>
+              <div class="text-muted">Échéance de bail ${x.jours < 0 ? "dépassée" : `dans ${x.jours} j`} (${dpFormatDate(x.bail.dateEcheance)})</div>
             </div>
           `).join("")
         }
