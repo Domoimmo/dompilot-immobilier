@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 <script>
 const content = dpRenderShell("parametres", "Paramètres", "Connexion GitHub, utilisateurs et référentiels");
 if (content) render();
@@ -101,9 +101,13 @@ function render() {
     </div>
 
     <div class="card mt-20">
-      <div class="card-title">Réinitialiser les données de démonstration</div>
-      <div class="text-muted mb-14">Efface toutes les modifications locales et recharge le jeu de données d'exemple.</div>
-      <button class="btn btn-danger" onclick="resetDemo()">Réinitialiser</button>
+      <div class="card-title">Réinitialisation locale (avancé)</div>
+      <div class="text-muted mb-14">
+        Efface le cache local de ce navigateur (retour au jeu de données vide) et recharge depuis le
+        dépôt privé si la synchronisation GitHub est configurée. À utiliser uniquement en cas de
+        problème d'affichage — n'affecte pas les données déjà synchronisées sur GitHub.
+      </div>
+      <button class="btn btn-danger" onclick="resetLocalCache()">Réinitialiser le cache local</button>
     </div>
   `;
 }
@@ -184,7 +188,7 @@ function deleteUser(id) {
   render();
 }
 
-function resetDemo() {
+function resetLocalCache() {
   if (!confirm("Toutes les données locales seront perdues. Continuer ?")) return;
   localStorage.removeItem(DP_STORAGE_KEY);
   window.location.reload();
