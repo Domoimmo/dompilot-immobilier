@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 <script>
 const content = dpRenderShell("locatif", "Gestion locative", "Baux, locataires et échéances du patrimoine en exploitation");
 if (content) render();
@@ -22,6 +22,8 @@ function render() {
   const surfaceLouee = opsExploitation.reduce((s, o) => s + dpSurfaceLouee(o), 0);
   const tauxOccupation = surfaceTotale ? Math.round((surfaceLouee / surfaceTotale) * 100) : null;
   const loyersAnnualises = opsExploitation.reduce((s, o) => s + dpLoyerAnnuelTotal(o), 0);
+  const valeurVenaleTotale = opsExploitation.reduce((s, o) => s + (o.valeurVenale || 0), 0);
+  const trlbGlobal = valeurVenaleTotale ? Math.round((loyersAnnualises / valeurVenaleTotale) * 1000) / 10 : null;
 
   const flatBaux = allBauxFlat();
   const echeancesProches = flatBaux
@@ -42,6 +44,7 @@ function render() {
         <div class="kpi-delta">sur ${dpFormatSurface(surfaceTotale)}</div>
       </div>
       <div class="kpi-card"><div class="kpi-label">Loyers annualisés (HT)</div><div class="kpi-value" style="font-size:20px;">${dpFormatEUR(loyersAnnualises)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">TRLB global (patrimoine)</div><div class="kpi-value">${trlbGlobal === null ? "—" : trlbGlobal + "%"}</div></div>
     </div>
 
     <div class="card mb-14">
