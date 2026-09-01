@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flex Office — DomPilot</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .fo-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+  .fo-card {
+    border:1px solid var(--gris-bordure); border-radius:10px; padding:14px; text-align:center; cursor:pointer;
+    transition:.15s; background:#fff;
+  }
+  .fo-card:hover { box-shadow:var(--ombre-hover); }
+  .fo-card.libre { border-color:var(--accent); }
+  .fo-card.mine { background:var(--accent-clair); border-color:var(--accent); }
+  .fo-card.occupe { background:#f8e4e4; border-color:var(--rouge); cursor:default; }
+  .fo-card .fo-icon { font-size:22px; margin-bottom:6px; }
+  .fo-card .fo-nom { font-weight:600; font-size:13.5px; color:var(--bleu-fonce); }
+  .fo-card .fo-statut { font-size:11.5px; margin-top:4px; color:#7b8a99; }
+</style>
+</head>
+<body>
+<script src="app.js?v=8"></script>
+<script>
+const content = dpRenderShell("flexoffice", "Flex Office", "Réservation des postes et salles de réunion — bureaux internes");
+let currentSiteId = null;
+let currentDate = new Date().toISOString().slice(0, 10);
+if (content) init();
+
+function init() {
+  if (DP.flexOfficeSites.length > 0) currentSiteId = DP.flexOfficeSites[0].id;
+  render();
+}
+
+function render() {
+  const isAdmin = currentIsAdminFO();
+
+  if (DP.flexOfficeSites.length === 0) {
+    content.innerHTML = `<div class="empty-state">
+      Aucun site configuré pour l'instant.
+      ${isAdmin
+        ? `Configurez vos sites, postes et salles de réunion depuis <a href="parametres.html">Paramètres</a>.`
+        : `Demandez à un administrateur de configurer les sites depuis Paramètres.`}
+    </div>`;
+    return;
+  }
+
+  const site = DP.flexOfficeSites.find(s => s.id === currentSiteId) || DP.flexOfficeSites[0];
+  const session = dpGetSession();
+  const mesReservations = dpFlexReservationsForUser(session.identifiant);
+
+  content.innerHTML = `
+    <div class="toolbar">
+      <div class="filters">
+        ${DP.flexOfficeSites.length > 1 ? `
+        <select id="fo-site" onchange="currentSiteId=this.value; render();">
+          ${DP.flexOfficeSites.map(s => `<option value="${s.id}" ${s.id===site.id?"selected":""}>${s.nom}</option>`).join("")}
+        </select>` : `<strong>${site.nom}</strong>`}
+        <input type="date" id="fo-date" value="${currentDate}" onchange="currentDate=this.value; render();">
+      </div>
+    </div>
+
+    <div class="card mb-14">
+      <div class="card-title">Postes de travail</div>
+      ${(site.postes || []).length === 0 ? `<div class="empty-state">Aucun poste configuré sur ce site.</div>` : `
+      <div class="fo-grid">
+        ${site.postes.map(p => renderResourceCard(site, "poste", p, session)).join("")}
+      </div>`}
+    </div>
+
+    <div class="card mb-14">
+      <div class="card-title">Salles de réunion</div>
+      ${(site.salles || []).length === 0 ? `<div class="empty-state">Aucune salle configurée sur ce site.</div>` : `
+      <div class="fo-grid">
+        ${site.salles.map(s => renderResourceCard(site, "salle", s, session)).join("")}
+      </div>`}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Mes réservations à venir</div>
+      ${mesReservations.length === 0 ? `<div class="empty-state">Aucune réservation à venir.</div>` : `
+      <table>
+        <thead><tr><th>Date</th><th>Site</th><th>Ressource</th><th></th></tr></thead>
+        <tbody>
+          ${mesReservations.map(r => {
+            const s = DP.flexOfficeSites.find(x => x.id === r.siteId);
+            return `<tr>
+              <td>${dpFormatDate(r.date)}</td>
+              <td>${s ? s.nom : "—"}</td>
+              <td>${s ? dpFlexResourceName(s, r.type, r.ressourceId) : "—"}</td>
+              <td><button class="btn btn-sm btn-outline" onclick="cancelReservation('${r.id}')">Annuler</button></td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>`}
+    </div>
+  `;
+}
+
+function renderResourceCard(site, type, resource, session) {
+  const resa = dpFlexReservationFor(site.id, type, resource.id, currentDate);
+  const icon = type === "poste" ? "💺" : "🗓";
+  let cls = "libre", statutTxt = "Libre — cliquer pour réserver", clickable = true;
+  if (resa) {
+    if (resa.identifiant === session.identifiant) {
+      cls = "mine"; statutTxt = "Réservé par vous"; clickable = true;
+    } else {
+      cls = "occupe"; statutTxt = "Réservé par " + dpUserName(resa.identifiant); clickable = false;
+    }
+  }
+  const capacite = type === "salle" && resource.capacite ? ` (${resource.capacite} pers.)` : "";
+  return `
+    <div class="fo-card ${cls}" ${clickable ? `onclick="toggleReservation('${site.id}','${type}','${resource.id}')"` : ""}>
+      <div class="fo-icon">${icon}</div>
+      <div class="fo-nom">${resource.nom}${capacite}</div>
+      <div class="fo-statut">${statutTxt}</div>
+    </div>
+  `;
+}
+
+function toggleReservation(siteId, type, ressourceId) {
+  const session = dpGetSession();
+  const existing = dpFlexReservationFor(siteId, type, ressourceId, currentDate);
+  if (existing) {
+    if (existing.identifiant !== session.identifiant) return; // sécurité, ne devrait pas arriver (carte non cliquable)
+    DP.flexOfficeReservations = DP.flexOfficeReservations.filter(r => r.id !== existing.id);
+  } else {
+    DP.flexOfficeReservations.push({
+      id: dpUid("resa"), siteId, type, ressourceId, date: currentDate,
+      identifiant: session.identifiant, createdAt: new Date().toISOString()
+    });
+  }
+  dpPersist();
+  render();
+}
+
+function cancelReservation(id) {
+  DP.flexOfficeReservations = DP.flexOfficeReservations.filter(r => r.id !== id);
+  dpPersist();
+  render();
+}
+
+function currentIsAdminFO() {
+  const session = dpGetSession();
+  const u = DP.utilisateurs.find(u => u.identifiant === session.identifiant);
+  return !!(u && u.isAdmin);
+}
+</script>
+</body>
+</html>
