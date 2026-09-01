@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 <script>
 const content = dpRenderShell("operations", "Fiche opération", "");
 let OPID = new URLSearchParams(window.location.search).get("id");
@@ -25,12 +25,12 @@ if (content) {
 function blankOp() {
   return {
     id: dpUid("pr"), nom: "", commune: "", territoire: DP.territoires[0],
-    typeOperation: DP.typesOperation[0], natureProduit: DP.naturesProduit[0],
+    typeOperation: DP.typesOperation[0], natureProduit: DP.naturesProduit[0], usage: DP.usagesOperation[0],
     phase: "Développement", responsable: DP.utilisateurs[0].identifiant, surfaceLocative: 0,
     budgetPrevisionnel: 0, budgetEngage: 0, valeurVenale: 0, chargesNonRecuperablesAnnuelles: 0,
     dateSignatureFoncier: "", dateLivraisonPrevue: "", latitude: null, longitude: null,
     jalons: DP.jalonsTypes.map(j => ({ libelle: j, date: "", statut: "attente" })),
-    taches: [], comptesRendus: [], baux: [], conformite: [], risques: [], contacts: [], contrats: []
+    taches: [], comptesRendus: [], baux: [], conformite: [], risques: [], contacts: [], contrats: [], travaux: []
   };
 }
 
@@ -109,14 +109,19 @@ function renderInfosTab(o) {
           <select id="i-nature">${DP.naturesProduit.map(t => `<option ${o.natureProduit===t?"selected":""}>${t}</option>`).join("")}</select></div>
       </div>
       <div class="field-row">
+        <div class="field"><label>Usage du bâtiment</label>
+          <select id="i-usage">${DP.usagesOperation.map(u => `<option ${o.usage===u?"selected":""}>${u}</option>`).join("")}</select></div>
         <div class="field"><label>Phase</label>
           <select id="i-phase">${DP.phases.map(p => `<option ${o.phase===p?"selected":""}>${p}</option>`).join("")}</select></div>
-        <div class="field"><label>Responsable de l'opération</label>
-          <select id="i-responsable">${DP.utilisateurs.map(u => `<option value="${u.identifiant}" ${o.responsable===u.identifiant?"selected":""}>${u.nom}</option>`).join("")}</select></div>
       </div>
       <div class="field-row">
+        <div class="field"><label>Responsable de l'opération</label>
+          <select id="i-responsable">${DP.utilisateurs.map(u => `<option value="${u.identifiant}" ${o.responsable===u.identifiant?"selected":""}>${u.nom}</option>`).join("")}</select></div>
         <div class="field"><label>Surface locative (m²)</label><input id="i-surface" type="number" value="${o.surfaceLocative}"></div>
+      </div>
+      <div class="field-row">
         <div class="field"><label>Date de livraison prévue</label><input id="i-livraison" type="date" value="${o.dateLivraisonPrevue}"></div>
+        <div class="field"></div>
       </div>
       <div class="card-title" style="margin-top:16px;font-size:13px;">Localisation (pour la carte)</div>
       <div class="field-row">
@@ -152,6 +157,7 @@ function collectInfosFromForm(o) {
   o.territoire = document.getElementById("i-territoire").value;
   o.typeOperation = document.getElementById("i-type").value;
   o.natureProduit = document.getElementById("i-nature").value;
+  o.usage = document.getElementById("i-usage").value;
   o.phase = document.getElementById("i-phase").value;
   o.responsable = document.getElementById("i-responsable").value;
   o.surfaceLocative = parseInt(document.getElementById("i-surface").value) || 0;
@@ -289,6 +295,14 @@ function renderFinancesTab(o) {
 
     <div class="card mt-20">
       <div class="flex-between mb-14">
+        <div class="card-title mt-0" style="margin:0;">Travaux &amp; aménagement</div>
+        <button class="btn btn-sm btn-accent" onclick="addTravaux()">+ Ajouter des travaux</button>
+      </div>
+      ${renderTravauxBlock(o)}
+    </div>
+
+    <div class="card mt-20">
+      <div class="flex-between mb-14">
         <div class="card-title mt-0" style="margin:0;">Contrats de service</div>
         <button class="btn btn-sm btn-accent" onclick="addContrat()">+ Ajouter un contrat</button>
       </div>
@@ -312,6 +326,127 @@ function renderFinancesTab(o) {
 function updateRenta() {
   op.valeurVenale = parseFloat(document.getElementById("f-valeur").value) || 0;
   op.chargesNonRecuperablesAnnuelles = parseFloat(document.getElementById("f-charges").value) || 0;
+  dpPersist();
+  render();
+  switchTab("finances");
+}
+
+/* ---------------- Travaux & aménagement (dans l'onglet Finances) ---------------- */
+function renderTravauxBlock(o) {
+  const travaux = o.travaux || [];
+  const prevu = dpBudgetTravauxPrevu(o);
+  const realise = dpBudgetTravauxRealise(o);
+  const pct = prevu ? Math.min(100, Math.round((realise / prevu) * 100)) : 0;
+
+  const table = travaux.length === 0 ? `<div class="empty-state">Aucun poste de travaux enregistré.</div>` : `
+    <table>
+      <thead><tr><th>Libellé</th><th>Type</th><th>Locataire lié</th><th>Budget prévu</th><th>Réalisé</th><th>Échéance</th><th>Statut</th><th></th></tr></thead>
+      <tbody>
+        ${travaux.map((t, idx) => {
+          const bail = t.bailIndex !== null && t.bailIndex !== undefined ? (o.baux || [])[t.bailIndex] : null;
+          const enRetard = t.statut !== "Terminé" && t.dateFinPrevue && dpJoursAvantEcheance(t.dateFinPrevue) < 0;
+          return `
+          <tr>
+            <td>${t.libelle}</td>
+            <td>${t.type}</td>
+            <td>${bail ? bail.locataire : "—"}</td>
+            <td>${dpFormatEUR(t.budgetPrevu)}</td>
+            <td>${dpFormatEUR(t.budgetRealise)}</td>
+            <td>${dpFormatDate(t.dateFinPrevue)} ${enRetard ? `<span class="badge badge-rouge">Retard</span>` : ""}</td>
+            <td><span class="badge ${dpStatutTravauxBadgeClass(t.statut)}">${t.statut}</span></td>
+            <td class="flex gap-8">
+              <button class="btn btn-sm btn-outline" onclick="editTravaux(${idx})">Modifier</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteTravaux(${idx})">Suppr.</button>
+            </td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>`;
+
+  const synthese = travaux.length === 0 ? "" : `
+    <div class="mt-20">
+      <div class="flex-between" style="font-size:12.5px;margin-bottom:4px;">
+        <span>Budget travaux réalisé / prévu</span><span class="text-muted">${dpFormatEUR(realise)} / ${dpFormatEUR(prevu)} (${pct}%)</span>
+      </div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%;background:var(--orange);"></div></div>
+    </div>`;
+
+  return table + synthese;
+}
+
+function blankTravaux() {
+  return { libelle: "", type: DP.typesTravaux[0], budgetPrevu: 0, budgetRealise: 0,
+    dateDebut: "", dateFinPrevue: "", statut: "Planifié", bailIndex: null };
+}
+
+function addTravaux() { openTravauxModal(null); }
+function editTravaux(idx) { openTravauxModal(idx); }
+
+function openTravauxModal(idx) {
+  const t = idx !== null ? op.travaux[idx] : blankTravaux();
+  const baux = op.baux || [];
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay open";
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <h3>${idx !== null ? "Modifier les travaux" : "Nouveaux travaux"}</h3>
+        <button class="modal-close" onclick="closeTravauxModal()">✕</button>
+      </div>
+      <div class="field"><label>Libellé</label><input id="t-libelle" value="${t.libelle}" placeholder="ex. Réfection façade, Aménagement RDC locataire X…"></div>
+      <div class="field-row">
+        <div class="field"><label>Type</label>
+          <select id="t-type">${DP.typesTravaux.map(x => `<option ${t.type===x?"selected":""}>${x}</option>`).join("")}</select></div>
+        <div class="field"><label>Locataire concerné (si aménagement)</label>
+          <select id="t-bail">
+            <option value="" ${t.bailIndex===null||t.bailIndex===undefined?"selected":""}>— Aucun (travaux généraux) —</option>
+            ${baux.map((b, i) => `<option value="${i}" ${t.bailIndex===i?"selected":""}>${b.locataire}</option>`).join("")}
+          </select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Budget prévu (€)</label><input id="t-prevu" type="number" value="${t.budgetPrevu}"></div>
+        <div class="field"><label>Budget réalisé (€)</label><input id="t-realise" type="number" value="${t.budgetRealise}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Date de début</label><input id="t-debut" type="date" value="${t.dateDebut}"></div>
+        <div class="field"><label>Fin prévue</label><input id="t-fin" type="date" value="${t.dateFinPrevue}"></div>
+      </div>
+      <div class="field"><label>Statut</label>
+        <select id="t-statut">${DP.statutsTravaux.map(s => `<option ${t.statut===s?"selected":""}>${s}</option>`).join("")}</select></div>
+      <div class="flex gap-8" style="justify-content:flex-end;margin-top:10px;">
+        <button class="btn btn-outline" onclick="closeTravauxModal()">Annuler</button>
+        <button class="btn btn-primary" onclick="saveTravaux(${idx})">Enregistrer</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+function closeTravauxModal() { document.querySelectorAll(".modal-overlay").forEach(m => m.remove()); }
+
+function saveTravaux(idx) {
+  const bailVal = document.getElementById("t-bail").value;
+  const data = {
+    libelle: document.getElementById("t-libelle").value.trim(),
+    type: document.getElementById("t-type").value,
+    bailIndex: bailVal === "" ? null : parseInt(bailVal),
+    budgetPrevu: parseFloat(document.getElementById("t-prevu").value) || 0,
+    budgetRealise: parseFloat(document.getElementById("t-realise").value) || 0,
+    dateDebut: document.getElementById("t-debut").value,
+    dateFinPrevue: document.getElementById("t-fin").value,
+    statut: document.getElementById("t-statut").value
+  };
+  if (!data.libelle) { alert("Le libellé est requis."); return; }
+  op.travaux = op.travaux || [];
+  if (idx !== null) { Object.assign(op.travaux[idx], data); }
+  else { op.travaux.push(data); }
+  dpPersist();
+  closeTravauxModal();
+  render();
+  switchTab("finances");
+}
+function deleteTravaux(idx) {
+  if (!confirm("Supprimer ce poste de travaux ?")) return;
+  op.travaux.splice(idx, 1);
   dpPersist();
   render();
   switchTab("finances");
