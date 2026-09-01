@@ -1,6 +1,6 @@
 # DomPilot — Pôle Immobilier
 
-Application de pilotage des opérations immobilières, construite sur le même modèle technique que **GESTOCK** et **DomAlerte** (HTML/CSS/JS statique, hébergement GitHub Pages), et inspirée des modules de **WIP by Cellance** (pilotage d'opérations pour maîtres d'ouvrage : promoteurs, bailleurs sociaux).
+Application de pilotage des opérations immobilières, construite sur le même socle technique que **GESTOCK** et **DomAlerte** (HTML/CSS/JS statique, hébergement GitHub Pages), et inspirée des modules de **WIP by Cellance** (pilotage d'opérations pour maîtres d'ouvrage : promoteurs, bailleurs sociaux).
 
 ## Modules
 
@@ -13,11 +13,23 @@ Application de pilotage des opérations immobilières, construite sur le même m
 | Fiche opération | `operation.html?id=...` | Suivi projet (fiche détaillée : infos, planning/jalons, budget, tâches/CR) |
 | Paramètres | `parametres.html` | Administration + connexion GitHub |
 
-## Fonctionnement actuel (V1 — prototype fonctionnel)
+## Fonctionnement
 
-- **Données** : un jeu de démonstration est chargé au premier lancement et stocké dans le `localStorage` du navigateur. Toute modification (création/édition d'opportunité, d'opération, de jalon, de tâche, de compte rendu, de budget) est persistée automatiquement.
-- **Authentification** : simplifiée (démo), à connecter à un vrai système (SSO / Azure AD Domofrance) lors du passage en production.
-- **Synchronisation GitHub** : la page *Paramètres* permet de renseigner un `owner`/`repo`/`token` pour committer les données (`data.json`) dans un repo GitHub via l'API Contents, exactement comme le fait GESTOCK. Tant que ce n'est pas configuré, l'app fonctionne en local uniquement.
+- **Données** : la base démarre vide (aucune opération/opportunité fictive). Toute création (opportunité, opération, jalon, tâche, compte rendu, budget) est saisie par l'équipe et persistée automatiquement.
+- **Authentification** : comptes réels avec mots de passe hashés (SHA-256 + sel, calculé côté navigateur) — voir « Sécurité » ci-dessous. Un compte administrateur (Marie Blain) peut ajouter/retirer des utilisateurs et gérer les droits admin depuis Paramètres.
+- **Synchronisation GitHub** : la page *Paramètres* permet de renseigner un `owner`/`repo`/`token` pour committer les données (`data.json`) dans le dépôt privé via l'API Contents. Tant que ce n'est pas configuré sur un poste donné, cet utilisateur travaille en local uniquement sur ce poste.
+
+## Sécurité — à relire avant un usage étendu
+
+DomPilot est une application 100% statique (aucun serveur applicatif). Conséquences :
+- Les mots de passe sont hashés (jamais stockés en clair), mais la vérification se fait côté
+  navigateur : quelqu'un ayant un accès en lecture au dépôt privé pourrait tenter une attaque
+  hors-ligne sur les hashes. Utilisez des mots de passe robustes.
+- Le token GitHub de synchronisation est stocké dans le `localStorage` du navigateur de chaque
+  utilisateur. Chaque personne doit avoir **son propre token fine-grained**, limité au seul dépôt
+  privé, permission Contents: Read/write, avec une expiration courte à renouveler.
+- Pour un usage à plus grande échelle ou des données très sensibles, prévoir à terme un vrai
+  backend d'authentification (SSO / Azure AD Domofrance) plutôt que ce mécanisme client-only.
 
 ## Déploiement (identique à GESTOCK / DomAlerte)
 
