@@ -59,6 +59,15 @@ const DP_SEED = {
   niveauxRisque: ["Faible", "Moyen", "Élevé"],
   statutsRisque: ["Identifié", "En traitement", "Maîtrisé"],
 
+  /* --- Contrats de service (inspiré du module GMAO Camileia) --- */
+  typesContrat: [
+    "Maintenance ascenseur", "Nettoyage", "Espaces verts", "Sécurité incendie",
+    "Gardiennage / Sécurité", "Assurance multirisque", "Contrôle technique / réglementaire",
+    "Maintenance CVC (chauffage / climatisation)", "Autre"
+  ],
+  periodicitesContrat: ["Mensuel", "Trimestriel", "Annuel"],
+  statutsContrat: ["Actif", "À renouveler", "Résilié"],
+
   /* --- Pipeline développement (module "Développement") --- */
   // Vide en version production : les opportunités réelles sont saisies depuis l'app.
   opportunites: [],
@@ -314,6 +323,21 @@ function dpPhaseColor(phase) {
 }
 function dpStatutRisqueBadgeClass(statut) {
   return { "Identifié": "badge-rouge", "En traitement": "badge-orange", "Maîtrisé": "badge-vert" }[statut] || "badge-gris";
+}
+function dpStatutContratBadgeClass(statut) {
+  return { "Actif": "badge-vert", "À renouveler": "badge-orange", "Résilié": "badge-gris" }[statut] || "badge-gris";
+}
+// Budget annuel total des contrats de service (statut Actif ou À renouveler) d'une opération.
+function dpBudgetContratsTotal(op) {
+  return (op.contrats || []).filter(c => c.statut !== "Résilié").reduce((s, c) => s + (c.montantAnnuel || 0), 0);
+}
+// Répartition du budget de contrats par type, pour une opération donnée.
+function dpBudgetContratsParType(op) {
+  const parType = {};
+  (op.contrats || []).filter(c => c.statut !== "Résilié").forEach(c => {
+    parType[c.type] = (parType[c.type] || 0) + (c.montantAnnuel || 0);
+  });
+  return parType;
 }
 
 /* ---------------------------------------------------------------------
