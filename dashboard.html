@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 <script>
 const content = dpRenderShell("dashboard", "Tableau de bord", "Vue d'ensemble du portefeuille d'opérations");
 if (content) render();
@@ -38,6 +38,13 @@ function render() {
   const conformiteAlertes = ops.flatMap(o => (o.conformite || [])
     .map(c => ({ op: o, item: c, jours: dpJoursAvantEcheance(c.dateEcheance) }))
   ).filter(x => x.item.statut === "Non conforme" || (x.jours !== null && x.jours <= 182));
+
+  // Budget total des contrats de service (patrimoine) et renouvellements proches
+  const budgetContratsTotal = ops.reduce((s, o) => s + dpBudgetContratsTotal(o), 0);
+  const contratsAlertes = ops.flatMap(o => (o.contrats || [])
+    .filter(c => c.statut !== "Résilié")
+    .map(c => ({ op: o, contrat: c, jours: dpJoursAvantEcheance(c.dateRenouvellement) }))
+  ).filter(x => x.jours !== null && x.jours <= 182);
 
   // Répartition par phase
   const parPhase = {};
@@ -100,6 +107,11 @@ function render() {
           <div class="progress-bar-fill" style="width:${tauxEngagement}%;"></div>
         </div>
       </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Budget contrats de service</div>
+        <div class="kpi-value" style="font-size:20px;">${dpFormatEUR(budgetContratsTotal)}</div>
+        <div class="kpi-delta">Annualisé, tous bâtiments</div>
+      </div>
     </div>
 
     <div class="grid-2">
@@ -117,7 +129,7 @@ function render() {
 
       <div class="card">
         <div class="card-title">Points d'attention</div>
-        ${alertes.length === 0 && echeancesProches.length === 0 && conformiteAlertes.length === 0 ? `<div class="empty-state">Aucune alerte en cours.</div>` : ""}
+        ${alertes.length === 0 && echeancesProches.length === 0 && conformiteAlertes.length === 0 && contratsAlertes.length === 0 ? `<div class="empty-state">Aucune alerte en cours.</div>` : ""}
         ${alertes.map(a => `
             <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
               <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${a.op.nom}</div>
@@ -136,6 +148,13 @@ function render() {
             <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
               <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${x.op.nom} — ${x.item.libelle}</div>
               <div class="text-muted">${x.item.statut === "Non conforme" ? "Non conforme" : `Échéance ${x.jours < 0 ? "dépassée" : `dans ${x.jours} j`}`} (${dpFormatDate(x.item.dateEcheance)})</div>
+            </div>
+          `).join("")
+        }
+        ${contratsAlertes.map(x => `
+            <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
+              <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${x.op.nom} — ${x.contrat.type}</div>
+              <div class="text-muted">Renouvellement de contrat ${x.jours < 0 ? "dépassé" : `dans ${x.jours} j`} (${dpFormatDate(x.contrat.dateRenouvellement)})</div>
             </div>
           `).join("")
         }
