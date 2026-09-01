@@ -9,7 +9,7 @@
    repo via l'API GitHub (Contents API) avec un Personal Access Token.
    ========================================================================= */
 
-const DP_STORAGE_KEY = "dompilot_data_v2";
+const DP_STORAGE_KEY = "dompilot_data_v3";
 const DP_SESSION_KEY = "dompilot_session_v1";
 
 /* ---------------------------------------------------------------------
@@ -17,13 +17,11 @@ const DP_SESSION_KEY = "dompilot_session_v1";
    modifie quoi que ce soit, et persistées en localStorage.
    --------------------------------------------------------------------- */
 const DP_SEED = {
-  // passwordHash/salt = null tant que l'utilisateur n'a pas fait sa "première connexion"
-  // (choix de son mot de passe personnel). Voir dpHashPassword / dpGenSalt plus bas.
+  // Compte réel initial. Les autres membres de l'équipe sont à ajouter depuis
+  // Paramètres (réservé aux administrateurs) : ils feront leur "première
+  // connexion" pour choisir eux-mêmes leur mot de passe.
   utilisateurs: [
-    { id: "u1", nom: "Directeur du Développement", identifiant: "j.moreau", role: "Direction", passwordHash: null, salt: null },
-    { id: "u2", nom: "Responsable de programmes", identifiant: "s.lefevre", role: "Chargé d'opérations", passwordHash: null, salt: null },
-    { id: "u3", nom: "Chargée de développement foncier", identifiant: "c.dubois", role: "Développement", passwordHash: null, salt: null },
-    { id: "u4", nom: "Marie Blain", identifiant: "mblain", role: "Chargé d'opérations", isAdmin: true,
+    { id: "u1", nom: "Marie Blain", identifiant: "mblain", role: "Chargé d'opérations", isAdmin: true,
       passwordHash: "4972461b078710060a97d6525d7bec4ea5afdefa4985dbc845531eb90bf28411",
       salt: "a495f1a9556f5a78637565824c3f8eb6" }
   ],
@@ -41,115 +39,12 @@ const DP_SEED = {
   ],
 
   /* --- Pipeline développement (module "Développement") --- */
-  opportunites: [
-    {
-      id: "op1", nom: "Îlot Belcier — friche SNCF", commune: "Bordeaux", territoire: "Bordeaux Métropole",
-      statut: "En cours", potentielLogements: 84, contact: "SNCF Immobilier", dateProspection: "2026-03-12",
-      note: "Foncier maîtrisé à confirmer, étude de sol en cours."
-    },
-    {
-      id: "op2", nom: "Ancien site EDF", commune: "Cenon", territoire: "Bordeaux Métropole",
-      statut: "À signer", potentielLogements: 46, contact: "Ville de Cenon", dateProspection: "2026-01-20",
-      note: "Compromis en cours de rédaction avec le notaire."
-    },
-    {
-      id: "op3", nom: "Cœur de bourg", commune: "Langon", territoire: "Sud Gironde",
-      statut: "Signé", potentielLogements: 28, contact: "Mairie de Langon", dateProspection: "2025-11-05",
-      note: "Acte signé, passage en montage prévu."
-    },
-    {
-      id: "op4", nom: "Résidence Les Tilleuls — extension", commune: "Mérignac", territoire: "Bordeaux Métropole",
-      statut: "Transmis MO", potentielLogements: 32, contact: "Interne", dateProspection: "2025-09-14",
-      note: "Dossier transmis à la maîtrise d'ouvrage pour instruction."
-    },
-    {
-      id: "op5", nom: "Terrain La Teste-de-Buch", commune: "La Teste-de-Buch", territoire: "Bassin d'Arcachon",
-      statut: "Sans suite", potentielLogements: 18, contact: "Propriétaire privé", dateProspection: "2025-08-02",
-      note: "Prix de sortie incompatible avec l'équilibre PLAI/PLUS."
-    }
-  ],
+  // Vide en version production : les opportunités réelles sont saisies depuis l'app.
+  opportunites: [],
 
   /* --- Opérations en cours (module "Suivi projet") --- */
-  operations: [
-    {
-      id: "pr1", nom: "Résidence Les Lauriers", commune: "Pessac", territoire: "Bordeaux Métropole",
-      typeOperation: "Construction neuve", natureProduit: "Logement social (PLUS/PLAI)",
-      phase: "Travaux", responsable: "s.lefevre", nbLogements: 58,
-      budgetPrevisionnel: 8900000, budgetEngage: 6200000,
-      dateSignatureFoncier: "2024-06-10", dateLivraisonPrevue: "2027-02-28",
-      jalons: [
-        { libelle: "Signature foncière", date: "2024-06-10", statut: "fait" },
-        { libelle: "Dépôt PC", date: "2024-09-15", statut: "fait" },
-        { libelle: "Obtention PC purgé", date: "2025-02-20", statut: "fait" },
-        { libelle: "Consultation entreprises", date: "2025-05-10", statut: "fait" },
-        { libelle: "Ordre de service travaux", date: "2025-09-01", statut: "fait" },
-        { libelle: "Livraison", date: "2027-02-28", statut: "encours" }
-      ],
-      taches: [
-        { titre: "Relance lot gros-œuvre — retard planning", echeance: "2026-09-05", fait: false },
-        { titre: "Réunion de chantier mensuelle", echeance: "2026-09-10", fait: false }
-      ],
-      comptesRendus: [
-        { date: "2026-08-20", auteur: "s.lefevre", texte: "Retard de 3 semaines sur le gros-œuvre, plan de rattrapage demandé à l'entreprise." }
-      ]
-    },
-    {
-      id: "pr2", nom: "Cœur de bourg Langon", commune: "Langon", territoire: "Sud Gironde",
-      typeOperation: "Construction neuve", natureProduit: "Accession sociale",
-      phase: "Montage", responsable: "c.dubois", nbLogements: 28,
-      budgetPrevisionnel: 4100000, budgetEngage: 480000,
-      dateSignatureFoncier: "2025-11-05", dateLivraisonPrevue: "2028-06-30",
-      jalons: [
-        { libelle: "Signature foncière", date: "2025-11-05", statut: "fait" },
-        { libelle: "Dépôt PC", date: "2026-10-15", statut: "encours" },
-        { libelle: "Obtention PC purgé", date: "2027-03-01", statut: "attente" },
-        { libelle: "Consultation entreprises", date: "2027-06-01", statut: "attente" },
-        { libelle: "Ordre de service travaux", date: "2027-09-01", statut: "attente" },
-        { libelle: "Livraison", date: "2028-06-30", statut: "attente" }
-      ],
-      taches: [
-        { titre: "Finaliser étude géotechnique G2", echeance: "2026-09-20", fait: false },
-        { titre: "Passage en comité d'engagement", echeance: "2026-10-02", fait: false }
-      ],
-      comptesRendus: []
-    },
-    {
-      id: "pr3", nom: "Résidence Bel Air — réhabilitation", commune: "Talence", territoire: "Bordeaux Métropole",
-      typeOperation: "Réhabilitation", natureProduit: "Logement social (PLUS/PLAI)",
-      phase: "Livraison", responsable: "s.lefevre", nbLogements: 40,
-      budgetPrevisionnel: 3200000, budgetEngage: 3050000,
-      dateSignatureFoncier: "2023-02-01", dateLivraisonPrevue: "2026-10-15",
-      jalons: [
-        { libelle: "Signature foncière", date: "2023-02-01", statut: "fait" },
-        { libelle: "Dépôt PC", date: "2023-06-01", statut: "fait" },
-        { libelle: "Obtention PC purgé", date: "2023-10-01", statut: "fait" },
-        { libelle: "Consultation entreprises", date: "2024-01-15", statut: "fait" },
-        { libelle: "Ordre de service travaux", date: "2024-05-01", statut: "fait" },
-        { libelle: "Livraison", date: "2026-10-15", statut: "encours" }
-      ],
-      taches: [
-        { titre: "Préparer dossier de fin de travaux (DOE)", echeance: "2026-09-30", fait: false }
-      ],
-      comptesRendus: [
-        { date: "2026-08-15", auteur: "s.lefevre", texte: "Levée des dernières réserves en cours, livraison confirmée mi-octobre." }
-      ]
-    },
-    {
-      id: "pr4", nom: "Îlot Belcier", commune: "Bordeaux", territoire: "Bordeaux Métropole",
-      typeOperation: "Construction neuve", natureProduit: "Locatif intermédiaire (LLI)",
-      phase: "Développement", responsable: "c.dubois", nbLogements: 84,
-      budgetPrevisionnel: 14500000, budgetEngage: 90000,
-      dateSignatureFoncier: "", dateLivraisonPrevue: "2029-12-31",
-      jalons: [
-        { libelle: "Signature foncière", date: "", statut: "attente" },
-        { libelle: "Dépôt PC", date: "", statut: "attente" }
-      ],
-      taches: [
-        { titre: "Finaliser négociation foncière avec SNCF Immobilier", echeance: "2026-10-01", fait: false }
-      ],
-      comptesRendus: []
-    }
-  ],
+  // Vide en version production : les opérations réelles sont saisies depuis l'app.
+  operations: [],
 
   postesBudget: [
     "Charge foncière", "Frais notariés", "Études (géotech, sols, diag)", "Honoraires MOE",
