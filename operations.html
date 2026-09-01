@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 <script>
 const content = dpRenderShell("operations", "Opérations", "Suivi de l'ensemble des opérations immobilières");
 if (content) render();
@@ -16,6 +16,7 @@ function getFilters() {
   return {
     phase: document.getElementById("filter-phase")?.value || "",
     territoire: document.getElementById("filter-territoire")?.value || "",
+    usage: document.getElementById("filter-usage")?.value || "",
     q: document.getElementById("filter-q")?.value?.toLowerCase() || ""
   };
 }
@@ -33,6 +34,10 @@ function render() {
           <option value="">Tous les territoires</option>
           ${DP.territoires.map(t => `<option value="${t}">${t}</option>`).join("")}
         </select>
+        <select id="filter-usage" onchange="rerender()">
+          <option value="">Tous les usages</option>
+          ${DP.usagesOperation.map(u => `<option value="${u}">${u}</option>`).join("")}
+        </select>
       </div>
       <button class="btn btn-accent" onclick="window.location.href='operation.html'">+ Nouvelle opération</button>
     </div>
@@ -40,7 +45,7 @@ function render() {
       <table>
         <thead>
           <tr>
-            <th>Opération</th><th>Territoire</th><th>Phase</th><th>Surface</th>
+            <th>Opération</th><th>Usage</th><th>Territoire</th><th>Phase</th><th>Surface</th>
             <th>Budget prév.</th><th>Engagé</th><th>Occupation</th><th>Livraison prévue</th>
           </tr>
         </thead>
@@ -56,16 +61,18 @@ function rerender() {
   const rows = DP.operations.filter(o =>
     (!f.phase || o.phase === f.phase) &&
     (!f.territoire || o.territoire === f.territoire) &&
+    (!f.usage || o.usage === f.usage) &&
     (!f.q || o.nom.toLowerCase().includes(f.q) || o.commune.toLowerCase().includes(f.q))
   );
   const tbody = document.getElementById("ops-tbody");
   if (rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">Aucune opération ne correspond aux filtres.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state">Aucune opération ne correspond aux filtres.</div></td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(o => `
     <tr onclick="window.location.href='operation.html?id=${o.id}'">
       <td><strong>${o.nom}</strong><br><span class="text-muted">${o.commune}</span></td>
+      <td><span class="badge ${o.usage === 'Occupation interne Domofrance' ? 'badge-bleu' : o.usage === 'Mixte' ? 'badge-orange' : 'badge-gris'}">${o.usage || "—"}</span></td>
       <td>${o.territoire}</td>
       <td><span class="badge ${dpPhaseBadgeClass(o.phase)}">${o.phase}</span></td>
       <td>${dpFormatSurface(o.surfaceLocative)}</td>
