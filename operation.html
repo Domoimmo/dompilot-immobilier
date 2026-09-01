@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 <script>
 const content = dpRenderShell("operations", "Fiche opération", "");
 let OPID = new URLSearchParams(window.location.search).get("id");
@@ -30,7 +30,7 @@ function blankOp() {
     budgetPrevisionnel: 0, budgetEngage: 0, valeurVenale: 0, chargesNonRecuperablesAnnuelles: 0,
     dateSignatureFoncier: "", dateLivraisonPrevue: "", latitude: null, longitude: null,
     jalons: DP.jalonsTypes.map(j => ({ libelle: j, date: "", statut: "attente" })),
-    taches: [], comptesRendus: [], baux: [], conformite: [], risques: [], contacts: []
+    taches: [], comptesRendus: [], baux: [], conformite: [], risques: [], contacts: [], contrats: []
   };
 }
 
@@ -288,6 +288,14 @@ function renderFinancesTab(o) {
     </div>
 
     <div class="card mt-20">
+      <div class="flex-between mb-14">
+        <div class="card-title mt-0" style="margin:0;">Contrats de service</div>
+        <button class="btn btn-sm btn-accent" onclick="addContrat()">+ Ajouter un contrat</button>
+      </div>
+      ${renderContratsBlock(o)}
+    </div>
+
+    <div class="card mt-20">
       <div class="card-title">Postes de dépense de référence</div>
       <div class="text-muted mb-14">Répartition indicative — à affiner poste par poste lors du bilan d'opération.</div>
       <table>
@@ -304,6 +312,117 @@ function renderFinancesTab(o) {
 function updateRenta() {
   op.valeurVenale = parseFloat(document.getElementById("f-valeur").value) || 0;
   op.chargesNonRecuperablesAnnuelles = parseFloat(document.getElementById("f-charges").value) || 0;
+  dpPersist();
+  render();
+  switchTab("finances");
+}
+
+/* ---------------- Contrats de service (dans l'onglet Finances) ---------------- */
+function renderContratsBlock(o) {
+  const contrats = o.contrats || [];
+  const budgetTotal = dpBudgetContratsTotal(o);
+  const parType = dpBudgetContratsParType(o);
+  const maxType = Math.max(1, ...Object.values(parType));
+
+  const table = contrats.length === 0 ? `<div class="empty-state">Aucun contrat enregistré.</div>` : `
+    <table>
+      <thead><tr><th>Type</th><th>Prestataire</th><th>Montant annuel</th><th>Périodicité</th><th>Renouvellement</th><th>Statut</th><th></th></tr></thead>
+      <tbody>
+        ${contrats.map((c, idx) => `
+          <tr>
+            <td>${c.type}</td>
+            <td>${c.prestataire || "—"}</td>
+            <td>${dpFormatEUR(c.montantAnnuel)}</td>
+            <td>${c.periodicite}</td>
+            <td>${dpFormatDate(c.dateRenouvellement)}</td>
+            <td><span class="badge ${dpStatutContratBadgeClass(c.statut)}">${c.statut}</span></td>
+            <td class="flex gap-8">
+              <button class="btn btn-sm btn-outline" onclick="editContrat(${idx})">Modifier</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteContrat(${idx})">Suppr.</button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>`;
+
+  const repartition = Object.keys(parType).length === 0 ? "" : `
+    <div class="mt-20">
+      <div class="flex-between mb-14"><strong style="font-size:13px;">Répartition du budget par type de contrat</strong>
+        <span class="text-muted">Total : ${dpFormatEUR(budgetTotal)} / an</span></div>
+      ${Object.entries(parType).map(([type, montant]) => `
+        <div style="margin-bottom:10px;">
+          <div class="flex-between" style="font-size:12.5px;margin-bottom:4px;">
+            <span>${type}</span><span class="text-muted">${dpFormatEUR(montant)}</span>
+          </div>
+          <div class="progress-bar"><div class="progress-bar-fill" style="width:${(montant/maxType)*100}%;background:var(--bleu);"></div></div>
+        </div>
+      `).join("")}
+    </div>`;
+
+  return table + repartition;
+}
+
+function blankContrat() {
+  return { type: DP.typesContrat[0], prestataire: "", montantAnnuel: 0,
+    periodicite: DP.periodicitesContrat[2], dateRenouvellement: "", statut: "Actif" };
+}
+
+function addContrat() { openContratModal(null); }
+function editContrat(idx) { openContratModal(idx); }
+
+function openContratModal(idx) {
+  const c = idx !== null ? op.contrats[idx] : blankContrat();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay open";
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <h3>${idx !== null ? "Modifier le contrat" : "Nouveau contrat de service"}</h3>
+        <button class="modal-close" onclick="closeContratModal()">✕</button>
+      </div>
+      <div class="field"><label>Type de contrat</label>
+        <select id="c-type">${DP.typesContrat.map(t => `<option ${c.type===t?"selected":""}>${t}</option>`).join("")}</select></div>
+      <div class="field"><label>Prestataire</label><input id="c-prestataire" value="${c.prestataire}" placeholder="ex. Otis, Onet, ISS…"></div>
+      <div class="field-row">
+        <div class="field"><label>Montant annuel (€)</label><input id="c-montant" type="number" value="${c.montantAnnuel}"></div>
+        <div class="field"><label>Périodicité de facturation</label>
+          <select id="c-periodicite">${DP.periodicitesContrat.map(p => `<option ${c.periodicite===p?"selected":""}>${p}</option>`).join("")}</select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Date de renouvellement</label><input id="c-renouvellement" type="date" value="${c.dateRenouvellement}"></div>
+        <div class="field"><label>Statut</label>
+          <select id="c-statut">${DP.statutsContrat.map(s => `<option ${c.statut===s?"selected":""}>${s}</option>`).join("")}</select></div>
+      </div>
+      <div class="flex gap-8" style="justify-content:flex-end;margin-top:10px;">
+        <button class="btn btn-outline" onclick="closeContratModal()">Annuler</button>
+        <button class="btn btn-primary" onclick="saveContrat(${idx})">Enregistrer</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+function closeContratModal() { document.querySelectorAll(".modal-overlay").forEach(m => m.remove()); }
+
+function saveContrat(idx) {
+  const data = {
+    type: document.getElementById("c-type").value,
+    prestataire: document.getElementById("c-prestataire").value.trim(),
+    montantAnnuel: parseFloat(document.getElementById("c-montant").value) || 0,
+    periodicite: document.getElementById("c-periodicite").value,
+    dateRenouvellement: document.getElementById("c-renouvellement").value,
+    statut: document.getElementById("c-statut").value
+  };
+  op.contrats = op.contrats || [];
+  if (idx !== null) { Object.assign(op.contrats[idx], data); }
+  else { op.contrats.push(data); }
+  dpPersist();
+  closeContratModal();
+  render();
+  switchTab("finances");
+}
+function deleteContrat(idx) {
+  if (!confirm("Supprimer ce contrat ?")) return;
+  op.contrats.splice(idx, 1);
   dpPersist();
   render();
   switchTab("finances");
