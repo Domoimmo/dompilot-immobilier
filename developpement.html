@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 <script>
 const STATUTS = ["En cours", "À signer", "Signé", "Transmis MO", "Sans suite"];
 const content = dpRenderShell("developpement", "Développement", "Pipeline des opportunités foncières");
@@ -28,7 +28,7 @@ function render() {
               <div class="kc-title">${o.nom}</div>
               <div class="kc-meta">${o.commune} · ${o.territoire}</div>
               <div class="kc-foot">
-                <span>🏠 ${o.potentielLogements} lgts</span>
+                <span>📐 ${dpFormatSurface(o.potentielSurfaceM2)}</span>
                 <span>${dpFormatDate(o.dateProspection)}</span>
               </div>
             </div>
@@ -69,8 +69,8 @@ function openOpp(id) {
         <div class="field"><label>Statut</label>
           <select id="f-statut">${STATUTS.map(s => `<option ${opp && opp.statut===s?"selected":""}>${s}</option>`).join("")}</select>
         </div>
-        <div class="field"><label>Potentiel logements</label>
-          <input id="f-pot" type="number" value="${opp ? opp.potentielLogements : ""}"></div>
+        <div class="field"><label>Surface potentielle (m²)</label>
+          <input id="f-pot" type="number" value="${opp ? opp.potentielSurfaceM2 : ""}"></div>
       </div>
       <div class="field-row">
         <div class="field"><label>Contact</label><input id="f-contact" value="${opp ? opp.contact : ""}"></div>
@@ -98,7 +98,7 @@ function saveOpp(id) {
     commune: document.getElementById("f-commune").value.trim(),
     territoire: document.getElementById("f-territoire").value,
     statut: document.getElementById("f-statut").value,
-    potentielLogements: parseInt(document.getElementById("f-pot").value) || 0,
+    potentielSurfaceM2: parseInt(document.getElementById("f-pot").value) || 0,
     contact: document.getElementById("f-contact").value.trim(),
     dateProspection: document.getElementById("f-date").value,
     note: document.getElementById("f-note").value.trim()
