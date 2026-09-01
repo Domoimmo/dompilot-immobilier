@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 <script>
 const content = dpRenderShell("dashboard", "Tableau de bord", "Vue d'ensemble du portefeuille d'opérations");
 if (content) render();
@@ -45,6 +45,13 @@ function render() {
     .filter(c => c.statut !== "Résilié")
     .map(c => ({ op: o, contrat: c, jours: dpJoursAvantEcheance(c.dateRenouvellement) }))
   ).filter(x => x.jours !== null && x.jours <= 182);
+
+  // Budget travaux (prévu vs réalisé) et travaux en retard
+  const budgetTravauxPrevu = ops.reduce((s, o) => s + dpBudgetTravauxPrevu(o), 0);
+  const budgetTravauxRealise = ops.reduce((s, o) => s + dpBudgetTravauxRealise(o), 0);
+  const travauxEnRetard = ops.flatMap(o => (o.travaux || [])
+    .map(t => ({ op: o, item: t, jours: t.dateFinPrevue ? dpJoursAvantEcheance(t.dateFinPrevue) : null }))
+  ).filter(x => x.item.statut !== "Terminé" && x.jours !== null && x.jours < 0);
 
   // Répartition par phase
   const parPhase = {};
@@ -112,6 +119,11 @@ function render() {
         <div class="kpi-value" style="font-size:20px;">${dpFormatEUR(budgetContratsTotal)}</div>
         <div class="kpi-delta">Annualisé, tous bâtiments</div>
       </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Budget travaux réalisé / prévu</div>
+        <div class="kpi-value" style="font-size:18px;">${dpFormatEUR(budgetTravauxRealise)} / ${dpFormatEUR(budgetTravauxPrevu)}</div>
+        <div class="kpi-delta ${travauxEnRetard.length > 0 ? 'negative' : ''}">${travauxEnRetard.length} chantier${travauxEnRetard.length>1?"s":""} en retard</div>
+      </div>
     </div>
 
     <div class="grid-2">
@@ -129,7 +141,7 @@ function render() {
 
       <div class="card">
         <div class="card-title">Points d'attention</div>
-        ${alertes.length === 0 && echeancesProches.length === 0 && conformiteAlertes.length === 0 && contratsAlertes.length === 0 ? `<div class="empty-state">Aucune alerte en cours.</div>` : ""}
+        ${alertes.length === 0 && echeancesProches.length === 0 && conformiteAlertes.length === 0 && contratsAlertes.length === 0 && travauxEnRetard.length === 0 ? `<div class="empty-state">Aucune alerte en cours.</div>` : ""}
         ${alertes.map(a => `
             <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
               <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${a.op.nom}</div>
@@ -155,6 +167,13 @@ function render() {
             <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
               <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${x.op.nom} — ${x.contrat.type}</div>
               <div class="text-muted">Renouvellement de contrat ${x.jours < 0 ? "dépassé" : `dans ${x.jours} j`} (${dpFormatDate(x.contrat.dateRenouvellement)})</div>
+            </div>
+          `).join("")
+        }
+        ${travauxEnRetard.map(x => `
+            <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
+              <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${x.op.nom} — ${x.item.libelle}</div>
+              <div class="text-muted">Travaux en retard (fin prévue le ${dpFormatDate(x.item.dateFinPrevue)})</div>
             </div>
           `).join("")
         }
