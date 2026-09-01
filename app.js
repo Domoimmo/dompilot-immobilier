@@ -23,7 +23,10 @@ const DP_SEED = {
   utilisateurs: [
     { id: "u1", nom: "Marie Blain", identifiant: "mblain", role: "Chargé d'opérations", isAdmin: true,
       passwordHash: "4972461b078710060a97d6525d7bec4ea5afdefa4985dbc845531eb90bf28411",
-      salt: "a495f1a9556f5a78637565824c3f8eb6" }
+      salt: "a495f1a9556f5a78637565824c3f8eb6" },
+    { id: "u2", nom: "Léandre Brunel", identifiant: "lbrunel", role: "Chargé d'opérations", isAdmin: true,
+      passwordHash: "4112b143cf286e3a8c2d104601ac0f344b31741463fa7e6405b88efd849acad9",
+      salt: "3bb0ed4e72b0ed90c4fb5ac155a587e6" }
   ],
 
   territoires: ["Bordeaux Métropole", "Bassin d'Arcachon", "Libournais", "Sud Gironde", "Landes"],
