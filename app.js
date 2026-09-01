@@ -68,6 +68,12 @@ const DP_SEED = {
   periodicitesContrat: ["Mensuel", "Trimestriel", "Annuel"],
   statutsContrat: ["Actif", "À renouveler", "Résilié"],
 
+  /* --- Flex Office (bureaux internes Domofrance) --- */
+  // Chaque site regroupe des postes de travail et des salles de réunion réservables.
+  flexOfficeSites: [],
+  // { id, siteId, type: "poste"|"salle", ressourceId, date: "AAAA-MM-JJ", identifiant, createdAt }
+  flexOfficeReservations: [],
+
   /* --- Pipeline développement (module "Développement") --- */
   // Vide en version production : les opportunités réelles sont saisies depuis l'app.
   opportunites: [],
@@ -327,6 +333,20 @@ function dpStatutRisqueBadgeClass(statut) {
 function dpStatutContratBadgeClass(statut) {
   return { "Actif": "badge-vert", "À renouveler": "badge-orange", "Résilié": "badge-gris" }[statut] || "badge-gris";
 }
+// --- Flex Office ---
+function dpFlexReservationFor(siteId, type, ressourceId, date) {
+  return DP.flexOfficeReservations.find(r => r.siteId === siteId && r.type === type && r.ressourceId === ressourceId && r.date === date);
+}
+function dpFlexReservationsForUser(identifiant) {
+  return DP.flexOfficeReservations
+    .filter(r => r.identifiant === identifiant && r.date >= new Date().toISOString().slice(0, 10))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+function dpFlexResourceName(site, type, ressourceId) {
+  const list = type === "poste" ? site.postes : site.salles;
+  const r = (list || []).find(x => x.id === ressourceId);
+  return r ? r.nom : "—";
+}
 // Budget annuel total des contrats de service (statut Actif ou À renouveler) d'une opération.
 function dpBudgetContratsTotal(op) {
   return (op.contrats || []).filter(c => c.statut !== "Résilié").reduce((s, c) => s + (c.montantAnnuel || 0), 0);
@@ -349,6 +369,7 @@ const DP_NAV = [
   { href: "operations.html", icon: "🏗", label: "Opérations", key: "operations" },
   { href: "carte.html", icon: "🗺", label: "Carte", key: "carte" },
   { href: "locatif.html", icon: "🔑", label: "Gestion locative", key: "locatif" },
+  { href: "flexoffice.html", icon: "💺", label: "Flex Office", key: "flexoffice" },
   { href: "parametres.html", icon: "⚙", label: "Paramètres", key: "parametres" }
 ];
 
