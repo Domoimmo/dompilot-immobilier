@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 <script>
 const content = dpRenderShell("operations", "Fiche opération", "");
 let OPID = new URLSearchParams(window.location.search).get("id");
@@ -27,10 +27,10 @@ function blankOp() {
     id: dpUid("pr"), nom: "", commune: "", territoire: DP.territoires[0],
     typeOperation: DP.typesOperation[0], natureProduit: DP.naturesProduit[0],
     phase: "Développement", responsable: DP.utilisateurs[0].identifiant, surfaceLocative: 0,
-    budgetPrevisionnel: 0, budgetEngage: 0,
+    budgetPrevisionnel: 0, budgetEngage: 0, valeurVenale: 0, chargesNonRecuperablesAnnuelles: 0,
     dateSignatureFoncier: "", dateLivraisonPrevue: "",
     jalons: DP.jalonsTypes.map(j => ({ libelle: j, date: "", statut: "attente" })),
-    taches: [], comptesRendus: [], baux: []
+    taches: [], comptesRendus: [], baux: [], conformite: [], risques: [], contacts: []
   };
 }
 
@@ -74,6 +74,7 @@ function render() {
       <div class="tab-btn" data-tab="planning" onclick="switchTab('planning')">Planning &amp; jalons</div>
       <div class="tab-btn" data-tab="finances" onclick="switchTab('finances')">Suivi financier</div>
       <div class="tab-btn" data-tab="locatif" onclick="switchTab('locatif')">Locataires &amp; baux</div>
+      <div class="tab-btn" data-tab="conformite" onclick="switchTab('conformite')">Conformité &amp; risques</div>
       <div class="tab-btn" data-tab="taches" onclick="switchTab('taches')">Tâches &amp; comptes rendus</div>
     </div>
 
@@ -81,6 +82,7 @@ function render() {
     <div class="tab-panel" id="tab-planning">${renderPlanningTab(o)}</div>
     <div class="tab-panel" id="tab-finances">${renderFinancesTab(o)}</div>
     <div class="tab-panel" id="tab-locatif">${renderLocatifTab(o)}</div>
+    <div class="tab-panel" id="tab-conformite">${renderConformiteTab(o)}</div>
     <div class="tab-panel" id="tab-taches">${renderTachesTab(o)}</div>
   `;
 }
@@ -117,6 +119,23 @@ function renderInfosTab(o) {
         <div class="field"><label>Date de livraison prévue</label><input id="i-livraison" type="date" value="${o.dateLivraisonPrevue}"></div>
       </div>
     </div>
+
+    <div class="card mt-20">
+      <div class="flex-between mb-14">
+        <div class="card-title mt-0" style="margin:0;">Contacts clés</div>
+        <button class="btn btn-sm btn-outline" onclick="addContact()">+ Ajouter</button>
+      </div>
+      ${(o.contacts || []).length === 0 ? `<div class="empty-state">Aucun contact enregistré (notaire, syndic, entreprise, mairie…).</div>` : `
+      <table>
+        <thead><tr><th>Rôle</th><th>Nom</th><th>Coordonnées</th><th></th></tr></thead>
+        <tbody>
+          ${o.contacts.map((c, idx) => `
+            <tr><td>${c.role}</td><td>${c.nom}</td><td>${c.coordonnees || "—"}</td>
+              <td><button class="btn btn-sm btn-danger" onclick="deleteContact(${idx})">Suppr.</button></td></tr>
+          `).join("")}
+        </tbody>
+      </table>`}
+    </div>
   `;
 }
 
@@ -130,6 +149,27 @@ function collectInfosFromForm(o) {
   o.responsable = document.getElementById("i-responsable").value;
   o.surfaceLocative = parseInt(document.getElementById("i-surface").value) || 0;
   o.dateLivraisonPrevue = document.getElementById("i-livraison").value;
+}
+
+function addContact() {
+  if (isNew) return;
+  const role = prompt("Rôle (ex. Notaire, Syndic, Entreprise générale, Mairie…) :");
+  if (!role) return;
+  const nom = prompt("Nom / raison sociale :");
+  if (!nom) return;
+  const coordonnees = prompt("Coordonnées (téléphone, email…), optionnel :") || "";
+  op.contacts = op.contacts || [];
+  op.contacts.push({ role, nom, coordonnees });
+  dpPersist();
+  render();
+  switchTab("infos");
+}
+function deleteContact(idx) {
+  if (!confirm("Supprimer ce contact ?")) return;
+  op.contacts.splice(idx, 1);
+  dpPersist();
+  render();
+  switchTab("infos");
 }
 
 function saveInfos() {
@@ -180,6 +220,7 @@ function updateJalonDate(idx, val) { op.jalons[idx].date = val; dpPersist(); }
 function renderFinancesTab(o) {
   if (isNew) return `<div class="empty-state">Enregistrez d'abord la fiche pour gérer le budget.</div>`;
   const pct = o.budgetPrevisionnel ? Math.min(100, Math.round((o.budgetEngage / o.budgetPrevisionnel) * 100)) : 0;
+  const trlb = dpTRLB(o), trln = dpTRLN(o);
   return `
     <div class="card">
       <div class="card-title">Budget global</div>
@@ -196,6 +237,24 @@ function renderFinancesTab(o) {
         <div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>
       </div>
     </div>
+
+    <div class="card mt-20">
+      <div class="card-title">Rentabilité locative</div>
+      <div class="text-muted mb-14">Indicateurs calculés à partir des baux actifs (onglet Locataires &amp; baux) et de la valeur vénale estimée.</div>
+      <div class="field-row">
+        <div class="field"><label>Valeur vénale estimée (€)</label>
+          <input id="f-valeur" type="number" value="${o.valeurVenale}" onchange="updateRenta()"></div>
+        <div class="field"><label>Charges non récupérables annuelles (€)</label>
+          <input id="f-charges" type="number" value="${o.chargesNonRecuperablesAnnuelles}" onchange="updateRenta()"></div>
+      </div>
+      <div class="grid-2">
+        <div class="kpi-card"><div class="kpi-label">TRLB (taux de rendement locatif brut)</div>
+          <div class="kpi-value" style="font-size:22px;">${trlb === null ? "—" : trlb + "%"}</div></div>
+        <div class="kpi-card"><div class="kpi-label">TRLN (taux de rendement locatif net)</div>
+          <div class="kpi-value" style="font-size:22px;">${trln === null ? "—" : trln + "%"}</div></div>
+      </div>
+    </div>
+
     <div class="card mt-20">
       <div class="card-title">Postes de dépense de référence</div>
       <div class="text-muted mb-14">Répartition indicative — à affiner poste par poste lors du bilan d'opération.</div>
@@ -209,6 +268,13 @@ function renderFinancesTab(o) {
       </table>
     </div>
   `;
+}
+function updateRenta() {
+  op.valeurVenale = parseFloat(document.getElementById("f-valeur").value) || 0;
+  op.chargesNonRecuperablesAnnuelles = parseFloat(document.getElementById("f-charges").value) || 0;
+  dpPersist();
+  render();
+  switchTab("finances");
 }
 function updateBudget() {
   op.budgetPrevisionnel = parseFloat(document.getElementById("f-budget-prev").value) || 0;
@@ -355,6 +421,96 @@ function deleteBail(idx) {
   dpPersist();
   render();
   switchTab("locatif");
+}
+
+/* ---------------- Onglet Conformité & risques ---------------- */
+function renderConformiteTab(o) {
+  if (isNew) return `<div class="empty-state">Enregistrez d'abord la fiche pour suivre la conformité et les risques.</div>`;
+  const conformite = o.conformite || [];
+  const risques = o.risques || [];
+  return `
+    <div class="grid-2">
+      <div class="card">
+        <div class="flex-between mb-14">
+          <div class="card-title mt-0" style="margin:0;">Diagnostics &amp; conformité réglementaire</div>
+          <button class="btn btn-sm btn-outline" onclick="addConformite()">+ Ajouter</button>
+        </div>
+        ${conformite.length === 0 ? `<div class="empty-state">Aucun diagnostic enregistré.</div>` : `
+        <table>
+          <thead><tr><th>Diagnostic</th><th>Échéance</th><th>Statut</th><th></th></tr></thead>
+          <tbody>
+            ${conformite.map((c, idx) => {
+              const jours = dpJoursAvantEcheance(c.dateEcheance);
+              const proche = jours !== null && jours <= 182;
+              return `
+              <tr>
+                <td>${c.libelle}</td>
+                <td>${dpFormatDate(c.dateEcheance)} ${proche ? `<span class="badge badge-orange">≤ 6 mois</span>` : ""}</td>
+                <td><select onchange="updateConformiteStatut(${idx}, this.value)">
+                  ${DP.statutsConformite.map(s => `<option ${c.statut===s?"selected":""}>${s}</option>`).join("")}
+                </select></td>
+                <td><button class="btn btn-sm btn-danger" onclick="deleteConformite(${idx})">Suppr.</button></td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>`}
+      </div>
+
+      <div class="card">
+        <div class="flex-between mb-14">
+          <div class="card-title mt-0" style="margin:0;">Risques identifiés</div>
+          <button class="btn btn-sm btn-outline" onclick="addRisque()">+ Ajouter</button>
+        </div>
+        ${risques.length === 0 ? `<div class="empty-state">Aucun risque enregistré.</div>` : `
+        <table>
+          <thead><tr><th>Risque</th><th>Niveau</th><th>Statut</th><th></th></tr></thead>
+          <tbody>
+            ${risques.map((r, idx) => `
+              <tr>
+                <td>${r.libelle}${r.commentaire ? `<br><span class="text-muted">${r.commentaire}</span>` : ""}</td>
+                <td><span class="badge ${dpNiveauRisqueBadgeClass(r.niveau)}">${r.niveau}</span></td>
+                <td><select onchange="updateRisqueStatut(${idx}, this.value)">
+                  ${DP.statutsRisque.map(s => `<option ${r.statut===s?"selected":""}>${s}</option>`).join("")}
+                </select></td>
+                <td><button class="btn btn-sm btn-danger" onclick="deleteRisque(${idx})">Suppr.</button></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>`}
+      </div>
+    </div>
+  `;
+}
+
+function addConformite() {
+  const libelle = prompt("Type de diagnostic (ex. " + DP.typesConformite.join(", ") + ") :", DP.typesConformite[0]);
+  if (!libelle) return;
+  const dateEcheance = prompt("Date d'échéance / prochaine visite (AAAA-MM-JJ) :") || "";
+  op.conformite = op.conformite || [];
+  op.conformite.push({ libelle, dateEcheance, statut: "À jour" });
+  dpPersist(); render(); switchTab("conformite");
+}
+function updateConformiteStatut(idx, val) { op.conformite[idx].statut = val; dpPersist(); }
+function deleteConformite(idx) {
+  if (!confirm("Supprimer ce diagnostic ?")) return;
+  op.conformite.splice(idx, 1);
+  dpPersist(); render(); switchTab("conformite");
+}
+
+function addRisque() {
+  const libelle = prompt("Intitulé du risque (ex. Retard permis de construire, Locataire en difficulté financière…) :");
+  if (!libelle) return;
+  const niveau = prompt("Niveau (Faible / Moyen / Élevé) :", "Moyen") || "Moyen";
+  const commentaire = prompt("Commentaire / plan de mitigation, optionnel :") || "";
+  op.risques = op.risques || [];
+  op.risques.push({ libelle, niveau: DP.niveauxRisque.includes(niveau) ? niveau : "Moyen", statut: "Identifié", commentaire });
+  dpPersist(); render(); switchTab("conformite");
+}
+function updateRisqueStatut(idx, val) { op.risques[idx].statut = val; dpPersist(); }
+function deleteRisque(idx) {
+  if (!confirm("Supprimer ce risque ?")) return;
+  op.risques.splice(idx, 1);
+  dpPersist(); render(); switchTab("conformite");
 }
 
 /* ---------------- Onglet Tâches & CR ---------------- */
