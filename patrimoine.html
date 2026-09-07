@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 <script>
 let filtres = { categorie: "", departement: "", recherche: "" };
 
@@ -49,6 +49,7 @@ function render() {
         </select>
       </div>
       <div class="filter-count" id="f-count"></div>
+      <button class="btn btn-outline btn-sm" onclick="exportSites()">&#8615; Exporter (Excel)</button>
       <button class="btn btn-accent btn-sm" onclick="openSiteForm(null)">+ Nouveau site</button>
     </div>
     <div class="table-wrap"><div id="table-holder"></div></div>
@@ -60,6 +61,13 @@ function render() {
   document.getElementById("f-departement").addEventListener("change", e => { filtres.departement = e.target.value; renderTable(); });
 
   renderTable();
+}
+
+function exportSites() {
+  const list = filteredSites();
+  const headers = ["Nom", "Catégorie", "Adresse", "Département", "Surface (m²)", "Effectif", "Ratio m²/poste", "Commentaire"];
+  const rows = list.map(s => [s.nom, s.categorie, s.adresse, s.departement, s.surfaceM2, s.effectif, s.ratioM2ParPoste, s.commentaire]);
+  dpExportCSV(`dompatrimoine_sites_${dpToday()}.csv`, headers, rows);
 }
 
 function filteredSites() {
