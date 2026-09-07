@@ -32,15 +32,28 @@ Deux fichiers n'ont pas été repris :
   (6216 lignes, format technique). À reprendre séparément si un besoin précis se dessine (ex. réconcilier
   fournisseurs comptables et fournisseurs de l'annuaire).
 
+## Authentification
+
+Connexion par identifiant + mot de passe (SHA-256 + sel, calculé côté navigateur — même schéma que
+DomPilot/GESTOCK). Un utilisateur sans mot de passe défini passe automatiquement par un écran
+"Première connexion" où il choisit son propre mot de passe. Les admins peuvent créer des comptes et
+réinitialiser des mots de passe depuis Paramètres.
+
+## Connexion à la base de données (GitHub)
+
+Le dépôt privé (`Domoimmo/dompilot-immobilier-data`) est **fixé dans le code** — plus besoin de
+ressaisir owner/repo/chemin. Il suffit de coller un **Personal Access Token** une fois par appareil
+dans Paramètres ; l'app s'y connecte ensuite automatiquement à chaque visite (comme GESTOCK).
+
 ## Pages
 
-- `index.html` — connexion (identifiant seul, pas de mot de passe : prototype)
+- `index.html` — connexion (identifiant + mot de passe, écran de première connexion)
 - `dashboard.html` — KPIs, alertes d'échéances de contrats, contrats par type, top fournisseurs
 - `patrimoine.html` — sites : liste, filtres, **création/édition/suppression**
 - `carte.html` — localisation des sites (Leaflet + OpenStreetMap/Nominatim)
-- `contrats.html` — contrats : liste, filtres (dont échéance), **création/édition/suppression**, badge d'échéance
+- `contrats.html` — contrats : liste, filtres (dont échéance et site), **création/édition/suppression**, rattachement à un site
 - `annuaire.html` — prestataires : liste, filtres, **création/édition/suppression**
-- `parametres.html` — connexion GitHub, utilisateurs, réinitialisation des données
+- `parametres.html` — token GitHub, mon compte, gestion des utilisateurs (admin), réinitialisation des données
 
 ## Échéances de contrats
 
