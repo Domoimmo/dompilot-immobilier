@@ -3,203 +3,105 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tableau de bord — DomPilot</title>
+<title>Tableau de bord — DomPatrimoine</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=1"></script>
 <script>
-const content = dpRenderShell("dashboard", "Tableau de bord", "Vue d'ensemble du portefeuille d'opérations");
+const content = dpRenderShell("dashboard", "Tableau de bord", "Vue d'ensemble du patrimoine tertiaire et des contrats de fonctionnement");
 if (content) render();
 
 function render() {
-  const ops = DP.operations;
-  const nbOps = ops.length;
-  const surfaceTotale = ops.reduce((s, o) => s + (o.surfaceLocative || 0), 0);
-  const budgetTotal = ops.reduce((s, o) => s + (o.budgetPrevisionnel || 0), 0);
-  const budgetEngage = ops.reduce((s, o) => s + (o.budgetEngage || 0), 0);
-  const tauxEngagement = budgetTotal ? Math.round((budgetEngage / budgetTotal) * 100) : 0;
-  const nbOpportunites = DP.opportunites.filter(o => !["Sans suite"].includes(o.statut)).length;
+  const sites = DP.sites;
+  const contrats = DP.contrats;
+  const annuaire = DP.annuaire;
 
-  // Patrimoine en exploitation : taux d'occupation moyen et loyers annualisés
-  const opsExploitation = ops.filter(o => o.phase === "Exploitation" && o.surfaceLocative);
-  const surfaceExploitation = opsExploitation.reduce((s, o) => s + (o.surfaceLocative || 0), 0);
-  const surfaceLoueeTotale = opsExploitation.reduce((s, o) => s + dpSurfaceLouee(o), 0);
-  const tauxOccupationMoyen = surfaceExploitation ? Math.round((surfaceLoueeTotale / surfaceExploitation) * 100) : null;
-  const loyersAnnualises = opsExploitation.reduce((s, o) => s + dpLoyerAnnuelTotal(o), 0);
+  const surfaceTotale = sites.reduce((s, x) => s + (x.surfaceM2 || 0), 0);
+  const effectifTotal = sites.reduce((s, x) => s + (x.effectif || 0), 0);
+  const nbAgences = sites.filter(s => s.categorie === "Agence").length;
 
-  // Échéances de baux à moins de 6 mois (toutes opérations en exploitation)
-  const echeancesProches = opsExploitation.flatMap(o => (o.baux || [])
-    .filter(b => b.statut !== "Vacant")
-    .map(b => ({ op: o, bail: b, jours: dpJoursAvantEcheance(b.dateEcheance) }))
-  ).filter(x => x.jours !== null && x.jours <= 182);
+  const parType = {};
+  contrats.forEach(c => { parType[c.type || "Non renseigné"] = (parType[c.type || "Non renseigné"] || 0) + 1; });
+  const typesTries = Object.entries(parType).sort((a, b) => b[1] - a[1]);
+  const maxType = typesTries.length ? typesTries[0][1] : 1;
 
-  // Diagnostics de conformité à échéance proche ou non conformes
-  const conformiteAlertes = ops.flatMap(o => (o.conformite || [])
-    .map(c => ({ op: o, item: c, jours: dpJoursAvantEcheance(c.dateEcheance) }))
-  ).filter(x => x.item.statut === "Non conforme" || (x.jours !== null && x.jours <= 182));
+  const parFournisseur = {};
+  contrats.forEach(c => { if (c.fournisseur) parFournisseur[c.fournisseur] = (parFournisseur[c.fournisseur] || 0) + 1; });
+  const topFournisseurs = Object.entries(parFournisseur).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
-  // Budget total des contrats de service (patrimoine) et renouvellements proches
-  const budgetContratsTotal = ops.reduce((s, o) => s + dpBudgetContratsTotal(o), 0);
-  const contratsAlertes = ops.flatMap(o => (o.contrats || [])
-    .filter(c => c.statut !== "Résilié")
-    .map(c => ({ op: o, contrat: c, jours: dpJoursAvantEcheance(c.dateRenouvellement) }))
-  ).filter(x => x.jours !== null && x.jours <= 182);
-
-  // Budget travaux (prévu vs réalisé) et travaux en retard
-  const budgetTravauxPrevu = ops.reduce((s, o) => s + dpBudgetTravauxPrevu(o), 0);
-  const budgetTravauxRealise = ops.reduce((s, o) => s + dpBudgetTravauxRealise(o), 0);
-  const travauxEnRetard = ops.flatMap(o => (o.travaux || [])
-    .map(t => ({ op: o, item: t, jours: t.dateFinPrevue ? dpJoursAvantEcheance(t.dateFinPrevue) : null }))
-  ).filter(x => x.item.statut !== "Terminé" && x.jours !== null && x.jours < 0);
-
-  // Répartition par phase
-  const parPhase = {};
-  DP.phases.forEach(p => parPhase[p] = 0);
-  ops.forEach(o => parPhase[o.phase] = (parPhase[o.phase] || 0) + 1);
-
-  // Répartition par territoire
-  const parTerritoire = {};
-  DP.territoires.forEach(t => parTerritoire[t] = 0);
-  ops.forEach(o => parTerritoire[o.territoire] = (parTerritoire[o.territoire] || 0) + 1);
-
-  // Répartition par nature de produit
-  const parNature = {};
-  DP.naturesProduit.forEach(n => parNature[n] = 0);
-  ops.forEach(o => parNature[o.natureProduit] = (parNature[o.natureProduit] || 0) + 1);
-
-  const maxPhase = Math.max(1, ...Object.values(parPhase));
-  const maxTerr = Math.max(1, ...Object.values(parTerritoire));
-
-  // Opérations à échéance proche (livraison < 6 mois) ou jalon en cours en retard simulé
-  const alertes = ops
-    .filter(o => o.phase !== "Clôturé")
-    .map(o => {
-      const jalonEnCours = (o.jalons || []).find(j => j.statut === "encours");
-      return { op: o, jalon: jalonEnCours };
-    })
-    .filter(x => x.jalon);
+  const parCategoriePrestation = {};
+  annuaire.forEach(a => { if (a.categoriePrestation) parCategoriePrestation[a.categoriePrestation] = (parCategoriePrestation[a.categoriePrestation] || 0) + 1; });
+  const nbCategoriesPrestations = Object.keys(parCategoriePrestation).length;
 
   content.innerHTML = `
-    <div class="kpi-grid">
+    <div class="grid-4 mb-14" style="margin-bottom:20px;">
       <div class="kpi-card">
-        <div class="kpi-label">Opérations actives</div>
-        <div class="kpi-value">${nbOps}</div>
-        <div class="kpi-delta">${nbOpportunites} opportunités en pipe</div>
+        <div class="kpi-label">Sites &amp; agences suivis</div>
+        <div class="kpi-value">${sites.length}</div>
+        <div class="kpi-sub">dont ${nbAgences} agences commerciales</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Surface en portefeuille</div>
-        <div class="kpi-value">${dpFormatSurface(surfaceTotale)}</div>
-        <div class="kpi-delta">Toutes phases confondues</div>
+        <div class="kpi-label">Surface administrative totale</div>
+        <div class="kpi-value">${dpFormatNumber(surfaceTotale, 0)} m&sup2;</div>
+        <div class="kpi-sub">tous sites confondus</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Taux d'occupation moyen</div>
-        <div class="kpi-value">${tauxOccupationMoyen === null ? "—" : tauxOccupationMoyen + "%"}</div>
-        <div class="kpi-delta">${opsExploitation.length} actif${opsExploitation.length>1?"s":""} en exploitation</div>
+        <div class="kpi-label">Effectif hébergé</div>
+        <div class="kpi-value">${dpFormatNumber(effectifTotal, 0)}</div>
+        <div class="kpi-sub">${dpFormatNumber(surfaceTotale && effectifTotal ? surfaceTotale / effectifTotal : 0, 1)} m&sup2; / poste en moyenne</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Loyers annualisés</div>
-        <div class="kpi-value" style="font-size:22px;">${dpFormatEUR(loyersAnnualises)}</div>
-        <div class="kpi-delta">Baux actifs uniquement</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Budget prévisionnel total</div>
-        <div class="kpi-value">${dpFormatEUR(budgetTotal)}</div>
-        <div class="kpi-delta">${dpFormatEUR(budgetEngage)} engagés</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Taux d'engagement</div>
-        <div class="kpi-value">${tauxEngagement}%</div>
-        <div class="progress-bar" style="margin-top:8px;">
-          <div class="progress-bar-fill" style="width:${tauxEngagement}%;"></div>
-        </div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Budget contrats de service</div>
-        <div class="kpi-value" style="font-size:20px;">${dpFormatEUR(budgetContratsTotal)}</div>
-        <div class="kpi-delta">Annualisé, tous bâtiments</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Budget travaux réalisé / prévu</div>
-        <div class="kpi-value" style="font-size:18px;">${dpFormatEUR(budgetTravauxRealise)} / ${dpFormatEUR(budgetTravauxPrevu)}</div>
-        <div class="kpi-delta ${travauxEnRetard.length > 0 ? 'negative' : ''}">${travauxEnRetard.length} chantier${travauxEnRetard.length>1?"s":""} en retard</div>
+        <div class="kpi-label">Contrats de fonctionnement</div>
+        <div class="kpi-value">${contrats.length}</div>
+        <div class="kpi-sub">${contrats.filter(c => c.etat === "E").length} actifs (état E)</div>
       </div>
     </div>
 
     <div class="grid-2">
       <div class="card">
-        <div class="card-title">Répartition des opérations par phase</div>
-        ${Object.entries(parPhase).map(([phase, n]) => `
+        <div class="card-title">Répartition des contrats par type</div>
+        ${typesTries.map(([type, n]) => `
           <div style="margin-bottom:10px;">
-            <div class="flex-between" style="font-size:12.5px;margin-bottom:4px;">
-              <span>${phase}</span><span class="text-muted">${n}</span>
+            <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px;">
+              <span>${dpEsc(type)}</span><span class="text-muted">${n}</span>
             </div>
-            <div class="progress-bar"><div class="progress-bar-fill" style="width:${(n/maxPhase)*100}%;background:var(--bleu);"></div></div>
+            <div class="progress-track"><div class="progress-fill" style="width:${(n / maxType) * 100}%"></div></div>
           </div>
         `).join("")}
       </div>
 
       <div class="card">
-        <div class="card-title">Points d'attention</div>
-        ${alertes.length === 0 && echeancesProches.length === 0 && conformiteAlertes.length === 0 && contratsAlertes.length === 0 && travauxEnRetard.length === 0 ? `<div class="empty-state">Aucune alerte en cours.</div>` : ""}
-        ${alertes.map(a => `
-            <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
-              <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${a.op.nom}</div>
-              <div class="text-muted">${a.jalon.libelle} — échéance ${dpFormatDate(a.jalon.date)}</div>
-            </div>
-          `).join("")
-        }
-        ${echeancesProches.map(x => `
-            <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
-              <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${x.op.nom} — ${x.bail.locataire}</div>
-              <div class="text-muted">Échéance de bail ${x.jours < 0 ? "dépassée" : `dans ${x.jours} j`} (${dpFormatDate(x.bail.dateEcheance)})</div>
-            </div>
-          `).join("")
-        }
-        ${conformiteAlertes.map(x => `
-            <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
-              <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${x.op.nom} — ${x.item.libelle}</div>
-              <div class="text-muted">${x.item.statut === "Non conforme" ? "Non conforme" : `Échéance ${x.jours < 0 ? "dépassée" : `dans ${x.jours} j`}`} (${dpFormatDate(x.item.dateEcheance)})</div>
-            </div>
-          `).join("")
-        }
-        ${contratsAlertes.map(x => `
-            <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
-              <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${x.op.nom} — ${x.contrat.type}</div>
-              <div class="text-muted">Renouvellement de contrat ${x.jours < 0 ? "dépassé" : `dans ${x.jours} j`} (${dpFormatDate(x.contrat.dateRenouvellement)})</div>
-            </div>
-          `).join("")
-        }
-        ${travauxEnRetard.map(x => `
-            <div style="padding:9px 0;border-bottom:1px solid var(--gris-bordure);">
-              <div style="font-size:13px;font-weight:600;color:var(--bleu-fonce);">${x.op.nom} — ${x.item.libelle}</div>
-              <div class="text-muted">Travaux en retard (fin prévue le ${dpFormatDate(x.item.dateFinPrevue)})</div>
-            </div>
-          `).join("")
-        }
+        <div class="card-title">Principaux fournisseurs (nb. de contrats)</div>
+        <table class="data-table">
+          <thead><tr><th>Fournisseur</th><th>Contrats</th></tr></thead>
+          <tbody>
+            ${topFournisseurs.map(([f, n]) => `<tr onclick="window.location.href='contrats.html?fournisseur=${encodeURIComponent(f)}'"><td>${dpEsc(f)}</td><td><span class="badge badge-blue">${n}</span></td></tr>`).join("")}
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <div class="grid-2 mt-20">
+    <div class="grid-2 mt-18">
       <div class="card">
-        <div class="card-title">Répartition par territoire</div>
-        ${Object.entries(parTerritoire).map(([t, n]) => `
-          <div style="margin-bottom:10px;">
-            <div class="flex-between" style="font-size:12.5px;margin-bottom:4px;">
-              <span>${t}</span><span class="text-muted">${n}</span>
-            </div>
-            <div class="progress-bar"><div class="progress-bar-fill" style="width:${(n/maxTerr)*100}%;background:var(--accent);"></div></div>
-          </div>
-        `).join("")}
+        <div class="card-title">Patrimoine — les plus grandes surfaces</div>
+        <table class="data-table">
+          <thead><tr><th>Site</th><th>m&sup2;</th><th>Effectif</th></tr></thead>
+          <tbody>
+            ${sites.slice().sort((a, b) => (b.surfaceM2 || 0) - (a.surfaceM2 || 0)).slice(0, 6).map(s => `
+              <tr onclick="window.location.href='patrimoine.html'"><td>${dpEsc(s.nom)}</td><td>${dpFormatNumber(s.surfaceM2, 0)}</td><td>${s.effectif ?? "&mdash;"}</td></tr>
+            `).join("")}
+          </tbody>
+        </table>
       </div>
 
       <div class="card">
-        <div class="card-title">Répartition par nature de produit</div>
-        ${Object.entries(parNature).map(([n, c]) => `
-          <div class="flex-between" style="padding:8px 0;border-bottom:1px solid var(--gris-bordure);font-size:13px;">
-            <span>${n}</span><span class="badge badge-bleu">${c}</span>
-          </div>
-        `).join("")}
+        <div class="card-title">Annuaire prestataires</div>
+        <div class="kpi-card" style="box-shadow:none;border:none;padding:4px 0 12px;">
+          <div class="kpi-value" style="font-size:22px;">${annuaire.length}</div>
+          <div class="kpi-sub">contacts référencés dans ${nbCategoriesPrestations} catégories de prestation, sur les secteurs Bordeaux, Agen et Pau-Bayonne</div>
+        </div>
+        <a href="annuaire.html" class="btn btn-outline btn-sm">Ouvrir l'annuaire &rarr;</a>
       </div>
     </div>
   `;
