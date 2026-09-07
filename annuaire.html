@@ -7,12 +7,12 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 <script>
+let filtres = { secteur: "", categorie: "", recherche: "" };
+
 const content = dpRenderShell("annuaire", "Annuaire prestataires", "Contacts fournisseurs et prestataires — Bordeaux, Agen, Pau-Bayonne");
 if (content) render();
-
-let filtres = { secteur: "", categorie: "", recherche: "" };
 
 function render() {
   const secteurs = dpUniqueSorted(DP.annuaire.map(a => a.secteur));
