@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 <script>
 let filtres = { secteur: "", categorie: "", recherche: "" };
 
@@ -52,6 +52,7 @@ function render() {
         </select>
       </div>
       <div class="filter-count" id="f-count"></div>
+      <button class="btn btn-outline btn-sm" onclick="exportContacts()">&#8615; Exporter (Excel)</button>
       <button class="btn btn-accent btn-sm" onclick="openContactForm(null)">+ Nouveau contact</button>
     </div>
     <div class="table-wrap"><div id="table-holder"></div></div>
@@ -63,6 +64,15 @@ function render() {
   document.getElementById("f-categorie").addEventListener("change", e => { filtres.categorie = e.target.value; renderTable(); });
 
   renderTable();
+}
+
+function exportContacts() {
+  const list = filteredAnnuaire();
+  const headers = ["Entreprise", "Catégorie de prestation", "Prestation", "Contact", "Fonction",
+    "Téléphone", "Email", "Email (2)", "Secteur", "Commentaires"];
+  const rows = list.map(a => [a.entreprise, a.categoriePrestation, a.prestation, a.contact, a.fonction,
+    a.telephone, a.email1, a.email2, a.secteur, a.commentaires]);
+  dpExportCSV(`dompatrimoine_annuaire_${dpToday()}.csv`, headers, rows);
 }
 
 function filteredAnnuaire() {
