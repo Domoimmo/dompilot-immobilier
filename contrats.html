@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contrats — DomPatrimoine</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="app.js?v=1"></script>
+<script>
+const content = dpRenderShell("contrats", "Contrats de fonctionnement", "Nettoyage, sécurité, location de matériel, contrôle réglementaire...");
+if (content) render();
+
+const urlParams = new URLSearchParams(window.location.search);
+let filtres = { type: "", fournisseur: urlParams.get("fournisseur") || "", recherche: "" };
+
+function render() {
+  const types = dpUniqueSorted(DP.contrats.map(c => c.type));
+  const fournisseurs = dpUniqueSorted(DP.contrats.map(c => c.fournisseur));
+
+  content.innerHTML = `
+    <div class="filter-bar">
+      <div class="field search">
+        <label>Recherche</label>
+        <input id="f-recherche" placeholder="Libellé, n° contrat, référence..." value="${dpEsc(filtres.recherche)}">
+      </div>
+      <div class="field">
+        <label>Type</label>
+        <select id="f-type">
+          <option value="">Tous</option>
+          ${types.map(t => `<option value="${dpEsc(t)}" ${filtres.type === t ? "selected" : ""}>${dpEsc(t)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Fournisseur</label>
+        <select id="f-fournisseur">
+          <option value="">Tous</option>
+          ${fournisseurs.map(f => `<option value="${dpEsc(f)}" ${filtres.fournisseur === f ? "selected" : ""}>${dpEsc(f)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="filter-count" id="f-count"></div>
+    </div>
+    <div class="table-wrap"><div id="table-holder"></div></div>
+    <div id="drawer-holder"></div>
+  `;
+
+  document.getElementById("f-recherche").addEventListener("input", dpDebounce(e => { filtres.recherche = e.target.value; renderTable(); }, 150));
+  document.getElementById("f-type").addEventListener("change", e => { filtres.type = e.target.value; renderTable(); });
+  document.getElementById("f-fournisseur").addEventListener("change", e => { filtres.fournisseur = e.target.value; renderTable(); });
+
+  renderTable();
+}
+
+function filteredContrats() {
+  return DP.contrats.filter(c => {
+    if (filtres.type && c.type !== filtres.type) return false;
+    if (filtres.fournisseur && c.fournisseur !== filtres.fournisseur) return false;
+    if (filtres.recherche) {
+      const q = filtres.recherche.toLowerCase();
+      if (!((c.libelle + " " + c.numero + " " + c.referenceExterne + " " + c.fournisseur).toLowerCase().includes(q))) return false;
+    }
+    return true;
+  }).sort((a, b) => (b.dateSignature || "").localeCompare(a.dateSignature || ""));
+}
+
+function renderTable() {
+  const list = filteredContrats();
+  document.getElementById("f-count").textContent = `${list.length} contrat${list.length > 1 ? "s" : ""}`;
+
+  if (!list.length) {
+    document.getElementById("table-holder").innerHTML = `<div class="table-empty">Aucun contrat ne correspond aux filtres.</div>`;
+    return;
+  }
+
+  document.getElementById("table-holder").innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Libellé</th><th>Type</th><th>Fournisseur</th><th>N&deg; contrat</th><th>Signature</th><th>Avancement</th>
+      </tr></thead>
+      <tbody>
+        ${list.map(c => `
+          <tr onclick="openContrat('${c.id}')">
+            <td><strong>${dpEsc(c.libelle)}</strong><div class="text-muted">${dpEsc(c.ho)}</div></td>
+            <td><span class="badge badge-blue">${dpEsc(c.type)}</span></td>
+            <td>${dpEsc(c.fournisseur)}</td>
+            <td>${dpEsc(c.numero)}</td>
+            <td>${dpFormatDate(c.dateSignature)}</td>
+            <td>${c.avancement === "Validé" ? '<span class="badge badge-green">Validé</span>' : dpEsc(c.avancement || "&mdash;")}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function openContrat(id) {
+  const c = DP.contrats.find(x => x.id === id);
+  if (!c) return;
+  const mois = Object.keys(c.prestationsMensuelles || {});
+  document.getElementById("drawer-holder").innerHTML = `
+    <div class="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
+      <div class="drawer">
+        <div class="drawer-header">
+          <div><h2 style="font-size:17px;">${dpEsc(c.libelle)}</h2><span class="badge badge-blue">${dpEsc(c.type)}</span></div>
+          <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+        </div>
+        <div class="drawer-section">
+          <h3>Identification</h3>
+          <div class="kv-row"><span class="k">Organisme</span><span class="v">${dpEsc(c.organisme)}</span></div>
+          <div class="kv-row"><span class="k">Rattachement (HO)</span><span class="v">${dpEsc(c.ho)}</span></div>
+          <div class="kv-row"><span class="k">N&deg; contrat</span><span class="v">${dpEsc(c.numero)}</span></div>
+          <div class="kv-row"><span class="k">Référence externe</span><span class="v">${dpEsc(c.referenceExterne || "&mdash;")}</span></div>
+        </div>
+        <div class="drawer-section">
+          <h3>Fournisseur &amp; signature</h3>
+          <div class="kv-row"><span class="k">Fournisseur</span><span class="v">${dpEsc(c.fournisseur)}</span></div>
+          <div class="kv-row"><span class="k">Signataire</span><span class="v">${dpEsc(c.signataire || "&mdash;")}</span></div>
+          <div class="kv-row"><span class="k">Date de signature</span><span class="v">${dpFormatDate(c.dateSignature)}</span></div>
+          <div class="kv-row"><span class="k">État</span><span class="v">${dpEsc(c.etat)}</span></div>
+        </div>
+        ${mois.length ? `
+        <div class="drawer-section">
+          <h3>Prestations mensuelles renseignées</h3>
+          ${mois.map(m => `<div class="kv-row"><span class="k">${dpEsc(m)}</span><span class="v">${dpEsc(c.prestationsMensuelles[m])}</span></div>`).join("")}
+        </div>` : ""}
+        ${c.passageAnnuel ? `<div class="drawer-section"><h3>Passage annuel</h3><div>${dpEsc(c.passageAnnuel)}</div></div>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function closeDrawer() { document.getElementById("drawer-holder").innerHTML = ""; }
+</script>
+</body>
+</html>
