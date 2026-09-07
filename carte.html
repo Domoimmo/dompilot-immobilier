@@ -9,7 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 </head>
 <body>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 <script>
 let map, markersLayer, mapReady = false;
 
@@ -23,7 +23,9 @@ function render() {
         <div class="text-muted" id="geocode-status">Initialisation de la carte&hellip;</div>
         <div class="filter-count">
           <span class="badge badge-blue">&#9679; Agence</span>
-          <span class="badge badge-gray">&#9679; Logement de fonction</span>
+          <span class="badge badge-orange">&#9679; Direction territoriale</span>
+          <span class="badge badge-green">&#9679; Bureau de gestion</span>
+          <span class="badge badge-gray">&#9679; Locaux gardien</span>
         </div>
       </div>
       <div id="dp-map" style="height:600px;border-radius:10px;overflow:hidden;box-shadow:var(--ombre);border:1px solid var(--gris-bordure);"></div>
@@ -96,8 +98,15 @@ async function geocodeAndRenderMarkers() {
   }
 }
 
+const CARTE_CATEGORY_COLOR = {
+  "Agence": "#0f4c81",
+  "Direction territoriale": "#e08a2c",
+  "Bureau de gestion": "#1f8a70",
+  "Locaux gardien": "#8a97a6"
+};
+
 function addMarker(s) {
-  const color = s.categorie === "Agence" ? "#0f4c81" : "#8a97a6";
+  const color = CARTE_CATEGORY_COLOR[s.categorie] || "#8a97a6";
   const marker = L.circleMarker([s.lat, s.lon], {
     radius: 9, color: "#fff", weight: 2, fillColor: color, fillOpacity: 0.95
   }).addTo(markersLayer);
