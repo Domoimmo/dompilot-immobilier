@@ -12,6 +12,7 @@
 <script src="app.js?v=12"></script>
 <script>
 let map, markersLayer, mapReady = false;
+let isGeocoding = false;
 
 const CARTE_CATEGORY_COLOR = {
   "Siège social": "#c94f4f",
@@ -59,21 +60,29 @@ async function geocodeAndRenderMarkers() {
   const statusEl = document.getElementById("geocode-status");
   const sites = DP.sites;
   const avecAdresse = sites.filter(s => s.adresse && s.adresse.trim());
-  const sansAdresse = sites.filter(s => !s.adresse || !s.adresse.trim());
 
+  // Affiche d'abord tout ce qui est déjà géocodé (instantané, jamais bloqué par le guard ci-dessous
+  // pour que la carte se redessine correctement même après un rechargement des données depuis GitHub).
   markersLayer.clearLayers();
   const bounds = [];
-
-  let aGeocoder = avecAdresse.filter(s => !(s.lat && s.lon));
-  let index = 0;
-
-  // Affiche d'abord tout ce qui est déjà géocodé (instantané)
   avecAdresse.forEach(s => { if (s.lat && s.lon) { addMarker(s); bounds.push([s.lat, s.lon]); } });
   if (bounds.length) map.fitBounds(bounds, { padding: [30, 30] });
 
+  const aGeocoder = avecAdresse.filter(s => !(s.lat && s.lon));
+
   if (!aGeocoder.length) {
     statusEl.textContent = `${avecAdresse.length} site(s) localisé(s) sur ${sites.length}.`;
-  } else {
+    renderMissingList(sites);
+    return;
+  }
+
+  // Empêche deux boucles de géocodage de tourner en parallèle (ex. rechargement GitHub en
+  // arrière-plan pendant qu'un géocodage est déjà en cours) — cela a saturé Nominatim (429).
+  if (isGeocoding) return;
+  isGeocoding = true;
+
+  try {
+    let index = 0;
     for (const s of aGeocoder) {
       index++;
       statusEl.textContent = `Géocodage des adresses en cours… (${index}/${aGeocoder.length})`;
@@ -84,20 +93,27 @@ async function geocodeAndRenderMarkers() {
         bounds.push([s.lat, s.lon]);
         if (bounds.length) map.fitBounds(bounds, { padding: [30, 30] });
       }
-      await dpSleep(1100); // respecte la politique d'usage Nominatim (~1 req/s)
+      await dpSleep(1200); // respecte la politique d'usage Nominatim (~1 req/s)
     }
     dpPersist();
-    const localises = sites.filter(s => s.lat && s.lon).length;
+    if (dpGetGithubConfig()) dpSyncWithGitHub();
+    const localises = DP.sites.filter(s => s.lat && s.lon).length;
     statusEl.textContent = `${localises} site(s) localisé(s) sur ${sites.length}.`;
+  } finally {
+    isGeocoding = false;
   }
 
+  renderMissingList(sites);
+}
+
+function renderMissingList(sites) {
   const missingEl = document.getElementById("sites-sans-adresse");
   const nonLocalises = sites.filter(s => !(s.lat && s.lon));
   if (nonLocalises.length) {
     missingEl.style.display = "block";
     missingEl.innerHTML = `
       <div class="card-title">Sites non localisés (${nonLocalises.length})</div>
-      <div class="text-muted mb-14">Adresse absente ou non reconnue par le géocodeur — à compléter dans le référentiel patrimoine.</div>
+      <div class="text-muted mb-14">Adresse absente, non reconnue par le géocodeur, ou géocodage temporairement limité (réessayez dans quelques minutes) — à compléter dans le référentiel patrimoine si besoin.</div>
       <ul style="margin:0;padding-left:18px;">
         ${nonLocalises.map(s => `<li>${dpEsc(s.nom)}${s.adresse ? ` <span class="text-muted">(${dpEsc(s.adresse)})</span>` : ""}</li>`).join("")}
       </ul>
@@ -122,11 +138,15 @@ function addMarker(s) {
   `);
 }
 
-async function dpGeocode(address) {
+async function dpGeocode(address, retryOn429) {
   try {
     const q = encodeURIComponent(address.replace(/\n/g, ", ") + ", France");
     const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=fr&q=${q}`;
     const resp = await fetch(url, { headers: { "Accept-Language": "fr" } });
+    if (resp.status === 429 && !retryOn429) {
+      await dpSleep(5000); // Nominatim demande de ralentir : on patiente puis on retente une fois
+      return dpGeocode(address, true);
+    }
     if (!resp.ok) return null;
     const data = await resp.json();
     if (!data.length) return null;
