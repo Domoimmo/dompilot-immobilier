@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Patrimoine — DomPatrimoine</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="app.js?v=1"></script>
+<script>
+const content = dpRenderShell("patrimoine", "Patrimoine", "Sites, agences et locaux administratifs — surfaces et effectifs");
+if (content) render();
+
+let filtres = { categorie: "", departement: "", recherche: "" };
+
+function render() {
+  const categories = dpUniqueSorted(DP.sites.map(s => s.categorie));
+  const departements = dpUniqueSorted(DP.sites.map(s => s.departement));
+
+  content.innerHTML = `
+    <div class="filter-bar">
+      <div class="field search">
+        <label>Recherche</label>
+        <input id="f-recherche" placeholder="Nom de site, adresse..." value="${dpEsc(filtres.recherche)}">
+      </div>
+      <div class="field">
+        <label>Catégorie</label>
+        <select id="f-categorie">
+          <option value="">Toutes</option>
+          ${categories.map(c => `<option value="${dpEsc(c)}" ${filtres.categorie === c ? "selected" : ""}>${dpEsc(c)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Département</label>
+        <select id="f-departement">
+          <option value="">Tous</option>
+          ${departements.map(d => `<option value="${dpEsc(d)}" ${filtres.departement == d ? "selected" : ""}>${dpEsc(d)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="filter-count" id="f-count"></div>
+    </div>
+    <div class="table-wrap"><div id="table-holder"></div></div>
+    <div id="drawer-holder"></div>
+  `;
+
+  document.getElementById("f-recherche").addEventListener("input", dpDebounce(e => { filtres.recherche = e.target.value; renderTable(); }, 150));
+  document.getElementById("f-categorie").addEventListener("change", e => { filtres.categorie = e.target.value; renderTable(); });
+  document.getElementById("f-departement").addEventListener("change", e => { filtres.departement = e.target.value; renderTable(); });
+
+  renderTable();
+}
+
+function filteredSites() {
+  return DP.sites.filter(s => {
+    if (filtres.categorie && s.categorie !== filtres.categorie) return false;
+    if (filtres.departement && String(s.departement) !== String(filtres.departement)) return false;
+    if (filtres.recherche) {
+      const q = filtres.recherche.toLowerCase();
+      if (!(s.nom.toLowerCase().includes(q) || (s.adresse || "").toLowerCase().includes(q))) return false;
+    }
+    return true;
+  }).sort((a, b) => (b.surfaceM2 || 0) - (a.surfaceM2 || 0));
+}
+
+function renderTable() {
+  const list = filteredSites();
+  document.getElementById("f-count").textContent = `${list.length} site${list.length > 1 ? "s" : ""}`;
+
+  if (!list.length) {
+    document.getElementById("table-holder").innerHTML = `<div class="table-empty">Aucun site ne correspond aux filtres.</div>`;
+    return;
+  }
+
+  document.getElementById("table-holder").innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Site</th><th>Catégorie</th><th>Département</th><th>Surface</th><th>Effectif</th><th>Ratio m&sup2;/poste</th>
+      </tr></thead>
+      <tbody>
+        ${list.map(s => `
+          <tr onclick="openSite('${s.id}')">
+            <td><strong>${dpEsc(s.nom)}</strong>${s.commentaire ? `<div class="text-muted">${dpEsc(s.commentaire)}</div>` : ""}</td>
+            <td><span class="badge ${s.categorie === 'Agence' ? 'badge-blue' : 'badge-gray'}">${dpEsc(s.categorie)}</span></td>
+            <td>${dpEsc(s.departement || "&mdash;")}</td>
+            <td>${dpFormatNumber(s.surfaceM2, 1)} m&sup2;</td>
+            <td>${s.effectif ?? "&mdash;"}</td>
+            <td>${s.ratioM2ParPoste ? dpFormatNumber(s.ratioM2ParPoste, 1) : "&mdash;"}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function openSite(id) {
+  const s = DP.sites.find(x => x.id === id);
+  if (!s) return;
+  const contratsLies = DP.contrats.filter(c => (c.libelle + " " + c.referenceExterne).toLowerCase().includes(""));
+  document.getElementById("drawer-holder").innerHTML = `
+    <div class="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
+      <div class="drawer">
+        <div class="drawer-header">
+          <div><h2 style="font-size:17px;">${dpEsc(s.nom)}</h2><span class="badge ${s.categorie === 'Agence' ? 'badge-blue' : 'badge-gray'}">${dpEsc(s.categorie)}</span></div>
+          <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+        </div>
+        <div class="drawer-section">
+          <h3>Localisation</h3>
+          <div class="kv-row"><span class="k">Adresse</span><span class="v">${s.adresse ? dpEsc(s.adresse) : "Non renseignée"}</span></div>
+          <div class="kv-row"><span class="k">Département</span><span class="v">${dpEsc(s.departement || "&mdash;")}</span></div>
+        </div>
+        <div class="drawer-section">
+          <h3>Occupation</h3>
+          <div class="kv-row"><span class="k">Surface</span><span class="v">${dpFormatNumber(s.surfaceM2, 1)} m&sup2;</span></div>
+          <div class="kv-row"><span class="k">Effectif</span><span class="v">${s.effectif ?? "&mdash;"}</span></div>
+          <div class="kv-row"><span class="k">Ratio m&sup2;/poste</span><span class="v">${s.ratioM2ParPoste ? dpFormatNumber(s.ratioM2ParPoste, 1) : "&mdash;"}</span></div>
+          ${s.commentaire ? `<div class="kv-row"><span class="k">Statut</span><span class="v">${dpEsc(s.commentaire)}</span></div>` : ""}
+        </div>
+        <div class="text-muted">Source : extraction "surface_locaux_administratif.xlsx". Le rattachement direct site &harr; contrats / équipements (référentiel complet bâtiments-niveaux-espaces-équipements façon Camileia) est une évolution possible de ce prototype.</div>
+      </div>
+    </div>
+  `;
+}
+
+function closeDrawer() { document.getElementById("drawer-holder").innerHTML = ""; }
+</script>
+</body>
+</html>
