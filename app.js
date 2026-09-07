@@ -144,6 +144,7 @@ async function dpLoadFromGitHub() {
 const DP_NAV = [
   { key: "dashboard",   href: "dashboard.html",   ico: "&#9635;", label: "Tableau de bord" },
   { key: "patrimoine",  href: "patrimoine.html",  ico: "&#127970;", label: "Patrimoine" },
+  { key: "carte",       href: "carte.html",       ico: "&#128506;", label: "Carte" },
   { key: "contrats",    href: "contrats.html",    ico: "&#128196;", label: "Contrats" },
   { key: "annuaire",    href: "annuaire.html",    ico: "&#9742;",  label: "Annuaire prestataires" },
   { key: "parametres",  href: "parametres.html",  ico: "&#9881;",  label: "Paramètres" }
