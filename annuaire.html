@@ -14,6 +14,19 @@ let filtres = { secteur: "", categorie: "", recherche: "" };
 const content = dpRenderShell("annuaire", "Annuaire prestataires", "Contacts fournisseurs et prestataires — Bordeaux, Agen, Pau-Bayonne");
 if (content) render();
 
+const CONTACT_FIELDS = [
+  { key: "entreprise", label: "Entreprise", type: "text", required: true },
+  { key: "categoriePrestation", label: "Catégorie de prestation", type: "text" },
+  { key: "prestation", label: "Prestation", type: "text" },
+  { key: "contact", label: "Nom du contact", type: "text" },
+  { key: "fonction", label: "Fonction", type: "text" },
+  { key: "telephone", label: "Téléphone", type: "text" },
+  { key: "email1", label: "Email", type: "text" },
+  { key: "email2", label: "Email (2)", type: "text" },
+  { key: "secteur", label: "Secteur", type: "select", options: ["BORDEAUX", "AGEN", "PAU-BAYONNE", "Désinfection"] },
+  { key: "commentaires", label: "Commentaires", type: "textarea" }
+];
+
 function render() {
   const secteurs = dpUniqueSorted(DP.annuaire.map(a => a.secteur));
   const categories = dpUniqueSorted(DP.annuaire.map(a => a.categoriePrestation));
@@ -39,8 +52,10 @@ function render() {
         </select>
       </div>
       <div class="filter-count" id="f-count"></div>
+      <button class="btn btn-accent btn-sm" onclick="openContactForm(null)">+ Nouveau contact</button>
     </div>
     <div class="table-wrap"><div id="table-holder"></div></div>
+    <div id="drawer-holder"></div>
   `;
 
   document.getElementById("f-recherche").addEventListener("input", dpDebounce(e => { filtres.recherche = e.target.value; renderTable(); }, 150));
@@ -79,13 +94,13 @@ function renderTable() {
       </tr></thead>
       <tbody>
         ${list.map(a => `
-          <tr>
+          <tr onclick="openContactForm('${a.id}')">
             <td><strong>${dpEsc(a.entreprise)}</strong>${a.categoriePrestation ? `<div class="text-muted">${dpEsc(a.categoriePrestation)}</div>` : ""}</td>
             <td>${dpEsc(a.prestation || "&mdash;")}</td>
             <td>${dpEsc(a.contact || "&mdash;")}</td>
             <td>${dpEsc(a.fonction || "&mdash;")}</td>
-            <td>${a.telephone ? `<a href="tel:${dpEsc(a.telephone)}">${dpEsc(a.telephone)}</a>` : "&mdash;"}</td>
-            <td>${a.email1 ? `<a href="mailto:${dpEsc(a.email1)}">${dpEsc(a.email1)}</a>` : "&mdash;"}</td>
+            <td>${dpEsc(a.telephone || "&mdash;")}</td>
+            <td>${dpEsc(a.email1 || "&mdash;")}</td>
             <td><span class="badge badge-gray">${dpEsc(a.secteur)}</span></td>
           </tr>
         `).join("")}
@@ -93,6 +108,53 @@ function renderTable() {
     </table>
   `;
 }
+
+function openContactForm(id) {
+  const contact = id ? DP.annuaire.find(x => x.id === id) : { secteur: "BORDEAUX" };
+  const isNew = !id;
+  document.getElementById("drawer-holder").innerHTML = `
+    <div class="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
+      <div class="drawer">
+        <div class="drawer-header">
+          <h2 style="font-size:17px;">${isNew ? "Nouveau contact" : dpEsc(contact.entreprise)}</h2>
+          <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+        </div>
+        <div id="contact-form">${dpRenderFormFields(CONTACT_FIELDS, contact)}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-primary btn-sm" onclick="saveContact('${id || ""}')">Enregistrer</button>
+          ${!isNew ? `<button class="btn btn-outline btn-sm" onclick="deleteContact('${id}')" style="color:var(--rouge);border-color:var(--rouge-clair);">Supprimer</button>` : ""}
+          <button class="btn btn-outline btn-sm" onclick="closeDrawer()">Annuler</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function saveContact(id) {
+  const values = dpReadFormFields(CONTACT_FIELDS);
+  const missing = dpValidateRequired(CONTACT_FIELDS, values);
+  if (missing.length) { alert("Champ requis manquant : " + missing.map(f => f.label).join(", ")); return; }
+
+  if (id) {
+    const idx = DP.annuaire.findIndex(x => x.id === id);
+    DP.annuaire[idx] = { ...DP.annuaire[idx], ...values };
+  } else {
+    DP.annuaire.push({ id: dpGenId("ann"), ...values });
+  }
+  dpAutoSync();
+  closeDrawer();
+  render();
+}
+
+function deleteContact(id) {
+  if (!confirm("Supprimer définitivement ce contact ?")) return;
+  DP.annuaire = DP.annuaire.filter(x => x.id !== id);
+  dpAutoSync();
+  closeDrawer();
+  render();
+}
+
+function closeDrawer() { document.getElementById("drawer-holder").innerHTML = ""; }
 </script>
 </body>
 </html>
