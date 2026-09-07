@@ -7,12 +7,9 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=10"></script>
 <script>
 let filtres = { categorie: "", departement: "", recherche: "" };
-
-const content = dpRenderShell("patrimoine", "Patrimoine", "Sites, agences et locaux administratifs — surfaces et effectifs");
-if (content) render();
 
 const SITE_CATEGORIES = ["Agence", "Direction territoriale", "Bureau de gestion", "Locaux gardien"];
 const SITE_CATEGORY_BADGE = {
@@ -31,6 +28,9 @@ const SITE_FIELDS = [
   { key: "effectif", label: "Effectif", type: "number" },
   { key: "commentaire", label: "Commentaire (statut, location...)", type: "text" }
 ];
+
+const content = dpRenderShell("patrimoine", "Patrimoine", "Sites, agences et locaux administratifs — surfaces et effectifs");
+if (content) render();
 
 function render() {
   const categories = dpUniqueSorted(DP.sites.map(s => s.categorie));
