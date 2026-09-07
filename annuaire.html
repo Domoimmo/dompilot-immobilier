@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Annuaire prestataires — DomPatrimoine</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="app.js?v=1"></script>
+<script>
+const content = dpRenderShell("annuaire", "Annuaire prestataires", "Contacts fournisseurs et prestataires — Bordeaux, Agen, Pau-Bayonne");
+if (content) render();
+
+let filtres = { secteur: "", categorie: "", recherche: "" };
+
+function render() {
+  const secteurs = dpUniqueSorted(DP.annuaire.map(a => a.secteur));
+  const categories = dpUniqueSorted(DP.annuaire.map(a => a.categoriePrestation));
+
+  content.innerHTML = `
+    <div class="filter-bar">
+      <div class="field search">
+        <label>Recherche</label>
+        <input id="f-recherche" placeholder="Entreprise, contact, prestation..." value="${dpEsc(filtres.recherche)}">
+      </div>
+      <div class="field">
+        <label>Secteur</label>
+        <select id="f-secteur">
+          <option value="">Tous</option>
+          ${secteurs.map(s => `<option value="${dpEsc(s)}" ${filtres.secteur === s ? "selected" : ""}>${dpEsc(s)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Catégorie de prestation</label>
+        <select id="f-categorie">
+          <option value="">Toutes</option>
+          ${categories.map(c => `<option value="${dpEsc(c)}" ${filtres.categorie === c ? "selected" : ""}>${dpEsc(c)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="filter-count" id="f-count"></div>
+    </div>
+    <div class="table-wrap"><div id="table-holder"></div></div>
+  `;
+
+  document.getElementById("f-recherche").addEventListener("input", dpDebounce(e => { filtres.recherche = e.target.value; renderTable(); }, 150));
+  document.getElementById("f-secteur").addEventListener("change", e => { filtres.secteur = e.target.value; renderTable(); });
+  document.getElementById("f-categorie").addEventListener("change", e => { filtres.categorie = e.target.value; renderTable(); });
+
+  renderTable();
+}
+
+function filteredAnnuaire() {
+  return DP.annuaire.filter(a => {
+    if (filtres.secteur && a.secteur !== filtres.secteur) return false;
+    if (filtres.categorie && a.categoriePrestation !== filtres.categorie) return false;
+    if (filtres.recherche) {
+      const q = filtres.recherche.toLowerCase();
+      const hay = [a.entreprise, a.contact, a.prestation, a.categoriePrestation, a.fonction].join(" ").toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).sort((a, b) => a.entreprise.localeCompare(b.entreprise, "fr"));
+}
+
+function renderTable() {
+  const list = filteredAnnuaire();
+  document.getElementById("f-count").textContent = `${list.length} contact${list.length > 1 ? "s" : ""}`;
+
+  if (!list.length) {
+    document.getElementById("table-holder").innerHTML = `<div class="table-empty">Aucun contact ne correspond aux filtres.</div>`;
+    return;
+  }
+
+  document.getElementById("table-holder").innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Entreprise</th><th>Prestation</th><th>Contact</th><th>Fonction</th><th>Téléphone</th><th>Email</th><th>Secteur</th>
+      </tr></thead>
+      <tbody>
+        ${list.map(a => `
+          <tr>
+            <td><strong>${dpEsc(a.entreprise)}</strong>${a.categoriePrestation ? `<div class="text-muted">${dpEsc(a.categoriePrestation)}</div>` : ""}</td>
+            <td>${dpEsc(a.prestation || "&mdash;")}</td>
+            <td>${dpEsc(a.contact || "&mdash;")}</td>
+            <td>${dpEsc(a.fonction || "&mdash;")}</td>
+            <td>${a.telephone ? `<a href="tel:${dpEsc(a.telephone)}">${dpEsc(a.telephone)}</a>` : "&mdash;"}</td>
+            <td>${a.email1 ? `<a href="mailto:${dpEsc(a.email1)}">${dpEsc(a.email1)}</a>` : "&mdash;"}</td>
+            <td><span class="badge badge-gray">${dpEsc(a.secteur)}</span></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+</script>
+</body>
+</html>
