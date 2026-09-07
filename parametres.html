@@ -7,104 +7,163 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=11"></script>
 <script>
-const content = dpRenderShell("parametres", "Paramètres", "Utilisateurs, données locales et évolutions prévues");
+const NEW_USER_FIELDS = [
+  { key: "identifiant", label: "Identifiant", type: "text", required: true },
+  { key: "nom", label: "Nom complet", type: "text", required: true },
+  { key: "role", label: "Rôle", type: "text" },
+  { key: "isAdmin", label: "Droits", type: "select", options: ["false", "true"], optionLabels: { "false": "Standard", "true": "Admin" } }
+];
+
+const content = dpRenderShell("parametres", "Paramètres", "Connexion, comptes utilisateurs et données locales");
 if (content) render();
 
 function render() {
-  const cfg = dpGetGithubConfig() || {};
+  const token = localStorage.getItem("dompatrimoine_github_token") || "";
+  const me = dpCurrentUser();
+
   content.innerHTML = `
     <div class="grid-2">
       <div class="card">
-        <div class="card-title">Dépôt privé de données</div>
+        <div class="card-title">Connexion à la base de données</div>
         <div class="text-muted mb-14">
-          DomPatrimoine fonctionne avec <b>deux dépôts GitHub</b>, comme DomPilot : celui qui héberge
-          cette application (public, servi par GitHub Pages) et un second, <b>privé</b>, qui contient
-          uniquement le fichier <code>data.json</code>. Renseignez ci-dessous les coordonnées du dépôt
-          <b>privé</b> uniquement.
+          Le dépôt de données est fixe (<code>${dpEsc(DP_GITHUB_REPO.owner)}/${dpEsc(DP_GITHUB_REPO.repo)}</code>) —
+          rien à configurer côté serveur. Il suffit de coller ci-dessous un token GitHub personnel
+          <b>une seule fois par appareil</b> ; l'app se connecte ensuite automatiquement à chaque visite.
         </div>
         <div class="login-error show" style="background:#fbeadb;color:var(--orange);">
-          &#9888; Utilisez un <b>fine-grained token</b> limité à ce seul dépôt privé, avec uniquement les
-          droits "Contents: Read and write", et évitez de partager cet écran ou les outils de
-          développement du navigateur.
+          &#9888; Utilisez un token <b>fine-grained</b>, limité au dépôt <code>${dpEsc(DP_GITHUB_REPO.repo)}</code>
+          uniquement, avec les droits "Contents: Read and write". Il est stocké uniquement dans ce
+          navigateur — jamais envoyé ailleurs qu'à l'API GitHub.
         </div>
-        <div class="field"><label>Propriétaire du dépôt privé (owner)</label>
-          <input id="g-owner" value="${dpEsc(cfg.owner || '')}" placeholder="ex. Domoimmo"></div>
-        <div class="field"><label>Nom du dépôt privé</label>
-          <input id="g-repo" value="${dpEsc(cfg.repo || '')}" placeholder="ex. dompatrimoine-data"></div>
-        <div class="field"><label>Chemin du fichier de données</label>
-          <input id="g-path" value="${dpEsc(cfg.path || 'data.json')}"></div>
-        <div class="field"><label>Personal Access Token (fine-grained, ce dépôt uniquement)</label>
-          <input id="g-token" type="password" value="${dpEsc(cfg.token || '')}" placeholder="github_pat_&hellip;"></div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-primary btn-sm" onclick="saveGithubCfg()">Enregistrer la connexion</button>
+        <div class="field"><label>Personal Access Token</label>
+          <input id="g-token" type="password" value="${dpEsc(token)}" placeholder="github_pat_&hellip;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="saveToken()">Enregistrer</button>
           <button class="btn btn-outline btn-sm" onclick="dpSyncWithGitHub()">Écrire maintenant</button>
           <button class="btn btn-outline btn-sm" onclick="loadNow()">Recharger depuis GitHub</button>
         </div>
-      </div>
-      <div class="card">
-        <div class="card-title">Utilisateurs (démonstration)</div>
-        <div class="text-muted mb-14">
-          Authentification simplifiée pour ce prototype (identifiant seul, sans mot de passe). À remplacer par le
-          même schéma que DomPilot/GESTOCK (hash + sel, ou SSO Domofrance) avant tout déploiement réel.
+        <div class="text-muted mt-18">
+          Obtenir un token : <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener">github.com/settings/tokens</a>
+          &rarr; Fine-grained tokens &rarr; Repository access : ${dpEsc(DP_GITHUB_REPO.repo)} &rarr; Permissions : Contents (Read and write).
         </div>
-        <table class="data-table">
-          <thead><tr><th>Identifiant</th><th>Nom</th><th>Rôle</th><th>Droits</th></tr></thead>
-          <tbody>
-            ${DP.utilisateurs.map(u => `
-              <tr><td>${dpEsc(u.identifiant)}</td><td>${dpEsc(u.nom)}</td><td>${dpEsc(u.role)}</td>
-              <td>${u.isAdmin ? '<span class="badge badge-green">Admin</span>' : '<span class="badge badge-gray">Standard</span>'}</td></tr>
-            `).join("")}
-          </tbody>
-        </table>
       </div>
 
       <div class="card">
-        <div class="card-title">Données locales</div>
-        <div class="text-muted mb-14">
-          Les données affichées proviennent des fichiers fournis (surfaces des locaux administratifs, contrats de
-          fonctionnement, annuaire des prestataires Bordeaux/Agen/Pau-Bayonne) et sont stockées dans le
-          <code>localStorage</code> de ce navigateur. Toute modification faite dans l'app reste locale à cet appareil.
-        </div>
-        <div class="field-row">
-          <div><span class="badge badge-blue">${DP.sites.length} sites</span></div>
-          <div><span class="badge badge-blue">${DP.contrats.length} contrats</span></div>
-          <div><span class="badge badge-blue">${DP.annuaire.length} contacts</span></div>
-        </div>
-        <div class="mt-18">
-          <button class="btn btn-outline btn-sm" onclick="dpResetDemo()">Réinitialiser les données locales</button>
-        </div>
+        <div class="card-title">Mon compte</div>
+        <div class="text-muted mb-14">Connecté en tant que <strong>${dpEsc(me ? me.nom : "")}</strong> (${dpEsc(me ? me.identifiant : "")}).</div>
+        <div class="field"><label>Nouveau mot de passe</label><input id="my-new-pwd" type="password" placeholder="8 caractères minimum"></div>
+        <div class="field"><label>Confirmer</label><input id="my-new-pwd-confirm" type="password"></div>
+        <button class="btn btn-outline btn-sm" onclick="changeMyPassword()">Modifier mon mot de passe</button>
+        <div id="my-pwd-msg" class="text-muted mt-18"></div>
       </div>
     </div>
 
     <div class="card mt-18">
-      <div class="card-title">Évolutions prévues</div>
-      <div class="text-muted" style="line-height:1.7;">
-        &bull; Rattachement direct site &harr; contrats &harr; équipements, en s'appuyant sur le référentiel patrimoine détaillé (sites/bâtiments/niveaux/espaces/équipements) du modèle Camileia.<br>
-        &bull; Suivi des échéances de contrats et alertes de renouvellement (les dates de fin de contrat ne sont pas présentes dans le fichier source actuel).<br>
-        &bull; Authentification réelle (hash + sel comme GESTOCK/DomPilot, ou SSO).<br>
-        &bull; Édition en ligne des fiches site / contrat / contact (le prototype est actuellement en lecture seule sur les données importées).
+      <div class="card-title">Comptes utilisateurs</div>
+      <table class="data-table">
+        <thead><tr><th>Identifiant</th><th>Nom</th><th>Rôle</th><th>Droits</th><th>Mot de passe</th><th></th></tr></thead>
+        <tbody>
+          ${DP.utilisateurs.map(u => `
+            <tr>
+              <td>${dpEsc(u.identifiant)}</td><td>${dpEsc(u.nom)}</td><td>${dpEsc(u.role)}</td>
+              <td>${u.isAdmin ? '<span class="badge badge-green">Admin</span>' : '<span class="badge badge-gray">Standard</span>'}</td>
+              <td>${u.passwordHash ? '<span class="badge badge-blue">Définit</span>' : '<span class="badge badge-orange">Première connexion</span>'}</td>
+              <td>
+                ${me && me.isAdmin ? `
+                  ${u.passwordHash ? `<button class="btn btn-outline btn-sm" onclick="resetUserPassword('${dpEsc(u.identifiant)}')">Réinitialiser</button>` : ""}
+                  ${me.identifiant !== u.identifiant ? `<button class="btn btn-outline btn-sm" onclick="deleteUser('${dpEsc(u.identifiant)}')" style="color:var(--rouge);border-color:var(--rouge-clair);">Supprimer</button>` : ""}
+                ` : ""}
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      ${me && me.isAdmin ? `
+      <div class="mt-18" style="max-width:420px;">
+        <div class="card-title">Ajouter un utilisateur</div>
+        ${dpRenderFormFields(NEW_USER_FIELDS, {})}
+        <button class="btn btn-accent btn-sm" onclick="addUser()">Créer</button>
+        <div class="text-muted mt-18">Le nouvel utilisateur choisira son mot de passe à sa première connexion.</div>
+      </div>` : `<div class="text-muted mt-18">Seuls les comptes administrateurs peuvent gérer les utilisateurs.</div>`}
+    </div>
+
+    <div class="card mt-18">
+      <div class="card-title">Données locales</div>
+      <div class="text-muted mb-14">
+        Les données sont stockées dans le <code>localStorage</code> de ce navigateur et synchronisées
+        automatiquement sur GitHub si un token est enregistré ci-dessus.
+      </div>
+      <div class="field-row">
+        <div><span class="badge badge-blue">${DP.sites.length} sites</span></div>
+        <div><span class="badge badge-blue">${DP.contrats.length} contrats</span></div>
+        <div><span class="badge badge-blue">${DP.annuaire.length} contacts</span></div>
+      </div>
+      <div class="mt-18">
+        <button class="btn btn-outline btn-sm" onclick="dpResetDemo()">Réinitialiser les données locales</button>
       </div>
     </div>
   `;
 }
 
-function saveGithubCfg() {
-  dpSaveGithubConfig({
-    owner: document.getElementById("g-owner").value.trim(),
-    repo: document.getElementById("g-repo").value.trim(),
-    path: document.getElementById("g-path").value.trim() || "data.json",
-    token: document.getElementById("g-token").value.trim()
-  });
-  alert("Connexion enregistrée.");
+function saveToken() {
+  dpSaveGithubToken(document.getElementById("g-token").value.trim());
+  alert("Token enregistré. Connexion automatique activée sur cet appareil.");
   render();
 }
 
 async function loadNow() {
   const ok = await dpLoadFromGitHub();
-  alert(ok ? "Données rechargées depuis le dépôt privé." : "Échec du chargement — vérifiez owner/repo/token.");
+  alert(ok ? "Données rechargées depuis le dépôt privé." : "Échec du chargement — vérifiez le token.");
   if (ok) render();
+}
+
+async function changeMyPassword() {
+  const pwd = document.getElementById("my-new-pwd").value;
+  const confirm = document.getElementById("my-new-pwd-confirm").value;
+  const msgEl = document.getElementById("my-pwd-msg");
+  if (pwd.length < 8) { msgEl.textContent = "Le mot de passe doit contenir au moins 8 caractères."; msgEl.style.color = "var(--rouge)"; return; }
+  if (pwd !== confirm) { msgEl.textContent = "Les deux mots de passe ne correspondent pas."; msgEl.style.color = "var(--rouge)"; return; }
+  const me = dpCurrentUser();
+  await dpSetPassword(me.identifiant, pwd, true);
+  msgEl.textContent = "Mot de passe modifié.";
+  msgEl.style.color = "var(--accent)";
+}
+
+function addUser() {
+  const values = dpReadFormFields(NEW_USER_FIELDS);
+  const missing = dpValidateRequired(NEW_USER_FIELDS, values);
+  if (missing.length) { alert("Champ requis manquant : " + missing.map(f => f.label).join(", ")); return; }
+  if (DP.utilisateurs.some(u => u.identifiant.toLowerCase() === values.identifiant.toLowerCase())) {
+    alert("Cet identifiant existe déjà.");
+    return;
+  }
+  DP.utilisateurs.push({
+    identifiant: values.identifiant,
+    nom: values.nom,
+    role: values.role || "",
+    isAdmin: values.isAdmin === "true",
+    passwordHash: null,
+    passwordSalt: null
+  });
+  dpAutoSync();
+  render();
+}
+
+function resetUserPassword(identifiant) {
+  if (!confirm(`Réinitialiser le mot de passe de ${identifiant} ? Il devra en choisir un nouveau à sa prochaine connexion.`)) return;
+  const u = DP.utilisateurs.find(x => x.identifiant === identifiant);
+  if (u) { u.passwordHash = null; u.passwordSalt = null; }
+  dpAutoSync();
+  render();
+}
+
+function deleteUser(identifiant) {
+  if (!confirm(`Supprimer définitivement le compte ${identifiant} ?`)) return;
+  DP.utilisateurs = DP.utilisateurs.filter(x => x.identifiant !== identifiant);
+  dpAutoSync();
+  render();
 }
 </script>
 </body>
