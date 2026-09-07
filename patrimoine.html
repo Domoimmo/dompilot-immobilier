@@ -7,12 +7,12 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 <script>
+let filtres = { categorie: "", departement: "", recherche: "" };
+
 const content = dpRenderShell("patrimoine", "Patrimoine", "Sites, agences et locaux administratifs — surfaces et effectifs");
 if (content) render();
-
-let filtres = { categorie: "", departement: "", recherche: "" };
 
 function render() {
   const categories = dpUniqueSorted(DP.sites.map(s => s.categorie));
