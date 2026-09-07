@@ -1,63 +1,58 @@
-# DomPilot — Pôle Immobilier
+# DomPatrimoine — Services Généraux
 
-Application de pilotage des opérations immobilières, construite sur le même socle technique que **GESTOCK** et **DomAlerte** (HTML/CSS/JS statique, hébergement GitHub Pages), et inspirée des modules de **WIP by Cellance** (pilotage d'opérations pour maîtres d'ouvrage : promoteurs, bailleurs sociaux).
+Application de gestion du patrimoine tertiaire pour le pôle Services Généraux, construite sur le
+même modèle technique que **GESTOCK**, **DomAlerte** et l'ancien **DomPilot** (HTML/CSS/JS statique,
+hébergement GitHub Pages, persistance via l'API GitHub Contents).
 
-## Modules
+**Ce dépôt remplace l'ancien contenu de DomPilot** (pôle immobilier, non utilisé) : même dépôt public
+`Domoimmo/dompilot-immobilier`, nouveau périmètre fonctionnel.
 
-| Module | Page | Équivalent WIP |
+## Architecture à deux dépôts
+
+- **Dépôt public** (`Domoimmo/dompilot-immobilier`) : héberge ce code via GitHub Pages.
+- **Dépôt privé** (`Domoimmo/dompilot-immobilier-data`) : contient uniquement `data.json`
+  (sites, contrats, annuaire, utilisateurs). Configuré depuis la page *Paramètres* avec un
+  token dédié (fine-grained, droits Contents: Read/write sur ce seul dépôt).
+
+## Origine des données
+
+Les jeux de données affichés sont extraits des fichiers fournis :
+
+| Module | Fichier source | Volume |
 |---|---|---|
-| Connexion | `index.html` | — |
-| Tableau de bord | `dashboard.html` | Analyse (reporting global) |
-| Développement | `developpement.html` | Développement (pipeline d'opportunités, vue kanban) |
-| Opérations (liste) | `operations.html` | Suivi projet (portefeuille) |
-| Fiche opération | `operation.html?id=...` | Suivi projet (fiche détaillée : infos, planning/jalons, budget, tâches/CR) |
-| Carte | `carte.html` | Cartographie patrimoniale (Camileia) — via Leaflet.js + OpenStreetMap, gratuit |
-| Paramètres | `parametres.html` | Administration + connexion GitHub |
+| Patrimoine | `surface_locaux_administratif.xlsx` | 19 sites (agences + logements de fonction) |
+| Contrats | `CONTRATS.xlsx` | 189 contrats de fonctionnement |
+| Annuaire prestataires | `ANNUAIRE_BORDEAUX_AGEN_PAU_2.xlsx` | 107 contacts, Bordeaux/Agen/Pau-Bayonne |
 
-## Fonctionnement
+Deux fichiers n'ont pas été repris :
+- **Template_Camileia_à_compléter.xlsx** — c'est un modèle d'import vide (2 lignes d'exemple), destiné
+  à l'outil Camileia lui-même. Son référentiel patrimoine (sites/bâtiments/niveaux/espaces/équipements)
+  est une piste d'évolution si vous voulez descendre au niveau du bâtiment/local plutôt que du site.
+- **Liste_fournisseurs_actifs_au_02102023.xlsx** — export brut du grand livre comptable ERP
+  (6216 lignes, format technique). À reprendre séparément si un besoin précis se dessine (ex. réconcilier
+  fournisseurs comptables et fournisseurs de l'annuaire).
 
-- **Données** : la base démarre vide (aucune opération/opportunité fictive). Toute création (opportunité, opération, jalon, tâche, compte rendu, budget) est saisie par l'équipe et persistée automatiquement.
-- **Authentification** : comptes réels avec mots de passe hashés (SHA-256 + sel, calculé côté navigateur) — voir « Sécurité » ci-dessous. Un compte administrateur (Marie Blain) peut ajouter/retirer des utilisateurs et gérer les droits admin depuis Paramètres.
-- **Synchronisation GitHub** : la page *Paramètres* permet de renseigner un `owner`/`repo`/`token` pour committer les données (`data.json`) dans le dépôt privé via l'API Contents. Tant que ce n'est pas configuré sur un poste donné, cet utilisateur travaille en local uniquement sur ce poste.
+## Pages
 
-## Sécurité — à relire avant un usage étendu
+- `index.html` — connexion (identifiant seul, pas de mot de passe : c'est un prototype)
+- `dashboard.html` — KPIs : surfaces, effectifs, contrats par type, top fournisseurs
+- `patrimoine.html` — liste des sites, filtrable par catégorie/département, fiche détail
+- `contrats.html` — liste des contrats, filtrable par type/fournisseur, fiche détail
+- `annuaire.html` — annuaire des prestataires, filtrable par secteur/catégorie de prestation
+- `parametres.html` — utilisateurs démo, réinitialisation des données, évolutions prévues
 
-DomPilot est une application 100% statique (aucun serveur applicatif). Conséquences :
-- Les mots de passe sont hashés (jamais stockés en clair), mais la vérification se fait côté
-  navigateur : quelqu'un ayant un accès en lecture au dépôt privé pourrait tenter une attaque
-  hors-ligne sur les hashes. Utilisez des mots de passe robustes.
-- Le token GitHub de synchronisation est stocké dans le `localStorage` du navigateur de chaque
-  utilisateur. Chaque personne doit avoir **son propre token fine-grained**, limité au seul dépôt
-  privé, permission Contents: Read/write, avec une expiration courte à renouveler.
-- Pour un usage à plus grande échelle ou des données très sensibles, prévoir à terme un vrai
-  backend d'authentification (SSO / Azure AD Domofrance) plutôt que ce mécanisme client-only.
+## Comptes de démonstration
 
-## Cartographie
+`s.moreau` (admin) ou `t.dupuis` — identifiant seul, sans mot de passe.
 
-La page *Carte* utilise **Leaflet.js + OpenStreetMap**, entièrement gratuit et sans clé API
-(contrairement à Google Maps). Chaque opération peut être géolocalisée manuellement (latitude/
-longitude) ou automatiquement via le bouton « Localiser automatiquement depuis la commune », qui
-interroge l'API de géocodage gratuite **Nominatim** (OpenStreetMap). Nominatim impose une limite
-d'usage raisonnable (~1 requête/seconde, pas d'automatisation massive) — largement suffisant pour
-un usage manuel occasionnel comme ici. Voir sa politique d'usage :
-https://operations.osmfoundation.org/policies/nominatim/
+## Pour tester en local
 
-## Déploiement (identique à GESTOCK / DomAlerte)
+Ouvrir `index.html` dans un navigateur (ou servir le dossier avec un petit serveur statique,
+ex. `python3 -m http.server`, pour éviter les restrictions de certains navigateurs sur les fichiers
+locaux).
 
-1. Créer un repo GitHub (ex. `dompilot-immobilier`).
-2. Y déposer tous les fichiers de ce dossier (`index.html`, `dashboard.html`, `developpement.html`, `operations.html`, `operation.html`, `parametres.html`, `style.css`, `app.js`).
-3. Activer **GitHub Pages** (Settings → Pages → Deploy from branch → `main` / racine).
-4. L'app est accessible à `https://<org>.github.io/<repo>/index.html`.
+## Quand vous voudrez déployer
 
-## Pistes d'évolution
-
-- **Suivi financier détaillé par poste** (charge foncière, honoraires MOE, travaux…) avec comparatif prévisionnel/réalisé — actuellement affiché à titre indicatif, à raccorder à une saisie ligne à ligne comme le module *Suivi financier* de WIP.
-- **Export Excel / reporting personnalisé** (comme GESTOCK).
-- **Vue Gantt** pour le planning d'opération (actuellement une timeline verticale des jalons).
-- **Gestion documentaire** (pièces jointes par opération).
-- **Droits d'accès par territoire / rôle**.
-- **Vraie synchronisation GitHub multi-utilisateurs** : actuellement en dernier-écrit-gagne (comme un simple commit) — à surveiller si plusieurs personnes éditent en même temps.
-
-## Modèle de données (résumé)
-
-Voir `app.js` → `DP_SEED` pour le détail complet : `utilisateurs`, `territoires`, `typesOperation`, `naturesProduit`, `phases`, `opportunites` (pipeline développement), `operations` (portefeuille, avec `jalons`, `taches`, `comptesRendus`), `postesBudget`.
+Le même pattern que DomPilot s'applique directement : dépôt public (code) + dépôt privé (`data.json`)
+sur GitHub Pages, synchronisation via un token à portée fine (Contents: Read/write) configuré depuis
+Paramètres. Dites-le-moi quand vous voudrez passer à cette étape.
