@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carte — DomPatrimoine</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+</head>
+<body>
+<script src="app.js?v=5"></script>
+<script>
+const content = dpRenderShell("carte", "Carte du patrimoine", "Localisation des sites Domofrance à partir de leur adresse");
+if (content) render();
+
+let map, markersLayer, mapReady = false;
+
+function render() {
+  if (!mapReady) {
+    content.innerHTML = `
+      <div class="filter-bar">
+        <div class="text-muted" id="geocode-status">Initialisation de la carte&hellip;</div>
+        <div class="filter-count">
+          <span class="badge badge-blue">&#9679; Agence</span>
+          <span class="badge badge-gray">&#9679; Logement de fonction</span>
+        </div>
+      </div>
+      <div id="dp-map" style="height:600px;border-radius:10px;overflow:hidden;box-shadow:var(--ombre);border:1px solid var(--gris-bordure);"></div>
+      <div class="card mt-18" id="sites-sans-adresse" style="display:none;"></div>
+      <div class="text-muted mt-18">
+        Géolocalisation par géocodage automatique des adresses (OpenStreetMap / Nominatim, gratuit, sans clé API).
+        Les coordonnées trouvées sont mises en cache localement pour éviter de re-géocoder à chaque visite.
+      </div>
+    `;
+    map = L.map("dp-map").setView([44.55, 0.4], 7.3);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19
+    }).addTo(map);
+    markersLayer = L.layerGroup().addTo(map);
+    mapReady = true;
+  }
+  geocodeAndRenderMarkers();
+}
+
+async function geocodeAndRenderMarkers() {
+  const statusEl = document.getElementById("geocode-status");
+  const sites = DP.sites;
+  const avecAdresse = sites.filter(s => s.adresse && s.adresse.trim());
+  const sansAdresse = sites.filter(s => !s.adresse || !s.adresse.trim());
+
+  markersLayer.clearLayers();
+  const bounds = [];
+
+  let aGeocoder = avecAdresse.filter(s => !(s.lat && s.lon));
+  let index = 0;
+
+  // Affiche d'abord tout ce qui est déjà géocodé (instantané)
+  avecAdresse.forEach(s => { if (s.lat && s.lon) { addMarker(s); bounds.push([s.lat, s.lon]); } });
+  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30] });
+
+  if (!aGeocoder.length) {
+    statusEl.textContent = `${avecAdresse.length} site(s) localisé(s) sur ${sites.length}.`;
+  } else {
+    for (const s of aGeocoder) {
+      index++;
+      statusEl.textContent = `Géocodage des adresses en cours… (${index}/${aGeocoder.length})`;
+      const coords = await dpGeocode(s.adresse);
+      if (coords) {
+        s.lat = coords.lat; s.lon = coords.lon;
+        addMarker(s);
+        bounds.push([s.lat, s.lon]);
+        if (bounds.length) map.fitBounds(bounds, { padding: [30, 30] });
+      }
+      await dpSleep(1100); // respecte la politique d'usage Nominatim (~1 req/s)
+    }
+    dpPersist();
+    const localises = sites.filter(s => s.lat && s.lon).length;
+    statusEl.textContent = `${localises} site(s) localisé(s) sur ${sites.length}.`;
+  }
+
+  const missingEl = document.getElementById("sites-sans-adresse");
+  const nonLocalises = sites.filter(s => !(s.lat && s.lon));
+  if (nonLocalises.length) {
+    missingEl.style.display = "block";
+    missingEl.innerHTML = `
+      <div class="card-title">Sites non localisés (${nonLocalises.length})</div>
+      <div class="text-muted mb-14">Adresse absente ou non reconnue par le géocodeur — à compléter dans le référentiel patrimoine.</div>
+      <ul style="margin:0;padding-left:18px;">
+        ${nonLocalises.map(s => `<li>${dpEsc(s.nom)}${s.adresse ? ` <span class="text-muted">(${dpEsc(s.adresse)})</span>` : ""}</li>`).join("")}
+      </ul>
+    `;
+  } else {
+    missingEl.style.display = "none";
+  }
+}
+
+function addMarker(s) {
+  const color = s.categorie === "Agence" ? "#0f4c81" : "#8a97a6";
+  const marker = L.circleMarker([s.lat, s.lon], {
+    radius: 9, color: "#fff", weight: 2, fillColor: color, fillOpacity: 0.95
+  }).addTo(markersLayer);
+  marker.bindPopup(`
+    <div style="font-family:inherit;min-width:180px;">
+      <strong>${dpEsc(s.nom)}</strong><br>
+      <span style="color:#7c8b9b;font-size:12px;">${dpEsc(s.categorie)}${s.departement ? " &middot; dépt " + dpEsc(s.departement) : ""}</span><br>
+      ${s.adresse ? `<span style="font-size:12.5px;">${dpEsc(s.adresse)}</span><br>` : ""}
+      <span style="font-size:12.5px;">${s.surfaceM2 ? dpFormatNumber(s.surfaceM2, 0) + " m&sup2;" : "&mdash;"} &middot; ${s.effectif ?? "&mdash;"} pers.</span>
+    </div>
+  `);
+}
+
+async function dpGeocode(address) {
+  try {
+    const q = encodeURIComponent(address.replace(/\n/g, ", ") + ", France");
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=fr&q=${q}`;
+    const resp = await fetch(url, { headers: { "Accept-Language": "fr" } });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (!data.length) return null;
+    return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+  } catch (e) {
+    console.error("Erreur de géocodage", e);
+    return null;
+  }
+}
+
+function dpSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
