@@ -190,7 +190,15 @@ function dpRenderShell(activeKey, pageTitle, pageSubtitle) {
         <div class="content" id="dp-content"></div>
       </div>
     </div>
+    <button class="back-to-top" id="dp-back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Retour en haut" title="Retour en haut">&#8593;</button>
   `;
+
+  const backBtn = document.getElementById("dp-back-to-top");
+  window.addEventListener("scroll", () => {
+    if (window.scrollY > 300) backBtn.classList.add("show");
+    else backBtn.classList.remove("show");
+  });
+
   return document.getElementById("dp-content");
 }
 
@@ -219,6 +227,11 @@ function dpFormatNumber(n, digits) {
 function dpUniqueSorted(arr) {
   return Array.from(new Set(arr.filter(v => v !== null && v !== undefined && v !== ""))).sort((a, b) =>
     String(a).localeCompare(String(b), "fr"));
+}
+
+function dpToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function dpDebounce(fn, wait) {
@@ -284,4 +297,28 @@ function dpEcheanceInfo(dateEcheance) {
   if (days < 0) return { label: `Échu depuis ${dpFormatDate(dateEcheance)}`, cls: "badge-red", days };
   if (days <= 60) return { label: `Dans ${days} j &middot; ${dpFormatDate(dateEcheance)}`, cls: "badge-orange", days };
   return { label: dpFormatDate(dateEcheance), cls: "badge-green", days };
+}
+
+/* ---------------------------------------------------------------------
+   8) EXPORT EXCEL (CSV compatible Excel, séparateur ";", sans dépendance)
+   --------------------------------------------------------------------- */
+function dpExportCSV(filename, headers, rows) {
+  const escCell = v => {
+    if (v === null || v === undefined) return "";
+    let s = String(v);
+    if (/[;"\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  };
+  const lines = [headers.map(escCell).join(";")];
+  rows.forEach(r => lines.push(r.map(escCell).join(";")));
+  const csv = "\uFEFF" + lines.join("\r\n"); // BOM UTF-8 pour les accents dans Excel
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
