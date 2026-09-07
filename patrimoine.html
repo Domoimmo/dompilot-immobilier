@@ -14,6 +14,16 @@ let filtres = { categorie: "", departement: "", recherche: "" };
 const content = dpRenderShell("patrimoine", "Patrimoine", "Sites, agences et locaux administratifs — surfaces et effectifs");
 if (content) render();
 
+const SITE_FIELDS = [
+  { key: "nom", label: "Nom du site", type: "text", required: true },
+  { key: "categorie", label: "Catégorie", type: "select", options: ["Agence", "Logement de fonction"] },
+  { key: "adresse", label: "Adresse", type: "textarea" },
+  { key: "departement", label: "Département", type: "number" },
+  { key: "surfaceM2", label: "Surface (m²)", type: "number" },
+  { key: "effectif", label: "Effectif", type: "number" },
+  { key: "commentaire", label: "Commentaire (statut, location...)", type: "text" }
+];
+
 function render() {
   const categories = dpUniqueSorted(DP.sites.map(s => s.categorie));
   const departements = dpUniqueSorted(DP.sites.map(s => s.departement));
@@ -39,6 +49,7 @@ function render() {
         </select>
       </div>
       <div class="filter-count" id="f-count"></div>
+      <button class="btn btn-accent btn-sm" onclick="openSiteForm(null)">+ Nouveau site</button>
     </div>
     <div class="table-wrap"><div id="table-holder"></div></div>
     <div id="drawer-holder"></div>
@@ -79,7 +90,7 @@ function renderTable() {
       </tr></thead>
       <tbody>
         ${list.map(s => `
-          <tr onclick="openSite('${s.id}')">
+          <tr onclick="openSiteForm('${s.id}')">
             <td><strong>${dpEsc(s.nom)}</strong>${s.commentaire ? `<div class="text-muted">${dpEsc(s.commentaire)}</div>` : ""}</td>
             <td><span class="badge ${s.categorie === 'Agence' ? 'badge-blue' : 'badge-gray'}">${dpEsc(s.categorie)}</span></td>
             <td>${dpEsc(s.departement || "&mdash;")}</td>
@@ -93,33 +104,56 @@ function renderTable() {
   `;
 }
 
-function openSite(id) {
-  const s = DP.sites.find(x => x.id === id);
-  if (!s) return;
-  const contratsLies = DP.contrats.filter(c => (c.libelle + " " + c.referenceExterne).toLowerCase().includes(""));
+function openSiteForm(id) {
+  const site = id ? DP.sites.find(x => x.id === id) : { categorie: "Agence" };
+  const isNew = !id;
   document.getElementById("drawer-holder").innerHTML = `
     <div class="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
       <div class="drawer">
         <div class="drawer-header">
-          <div><h2 style="font-size:17px;">${dpEsc(s.nom)}</h2><span class="badge ${s.categorie === 'Agence' ? 'badge-blue' : 'badge-gray'}">${dpEsc(s.categorie)}</span></div>
+          <h2 style="font-size:17px;">${isNew ? "Nouveau site" : dpEsc(site.nom)}</h2>
           <button class="drawer-close" onclick="closeDrawer()">&times;</button>
         </div>
-        <div class="drawer-section">
-          <h3>Localisation</h3>
-          <div class="kv-row"><span class="k">Adresse</span><span class="v">${s.adresse ? dpEsc(s.adresse) : "Non renseignée"}</span></div>
-          <div class="kv-row"><span class="k">Département</span><span class="v">${dpEsc(s.departement || "&mdash;")}</span></div>
+        <div id="site-form">${dpRenderFormFields(SITE_FIELDS, site)}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-primary btn-sm" onclick="saveSite('${id || ""}')">Enregistrer</button>
+          ${!isNew ? `<button class="btn btn-outline btn-sm" onclick="deleteSite('${id}')" style="color:var(--rouge);border-color:var(--rouge-clair);">Supprimer</button>` : ""}
+          <button class="btn btn-outline btn-sm" onclick="closeDrawer()">Annuler</button>
         </div>
-        <div class="drawer-section">
-          <h3>Occupation</h3>
-          <div class="kv-row"><span class="k">Surface</span><span class="v">${dpFormatNumber(s.surfaceM2, 1)} m&sup2;</span></div>
-          <div class="kv-row"><span class="k">Effectif</span><span class="v">${s.effectif ?? "&mdash;"}</span></div>
-          <div class="kv-row"><span class="k">Ratio m&sup2;/poste</span><span class="v">${s.ratioM2ParPoste ? dpFormatNumber(s.ratioM2ParPoste, 1) : "&mdash;"}</span></div>
-          ${s.commentaire ? `<div class="kv-row"><span class="k">Statut</span><span class="v">${dpEsc(s.commentaire)}</span></div>` : ""}
-        </div>
-        <div class="text-muted">Source : extraction "surface_locaux_administratif.xlsx". Le rattachement direct site &harr; contrats / équipements (référentiel complet bâtiments-niveaux-espaces-équipements façon Camileia) est une évolution possible de ce prototype.</div>
+        ${site.ratioM2ParPoste ? `<div class="text-muted mt-18">Ratio m&sup2;/poste actuel : ${dpFormatNumber(site.ratioM2ParPoste, 1)} (recalculé automatiquement si vous modifiez surface/effectif et enregistrez).</div>` : ""}
       </div>
     </div>
   `;
+}
+
+function saveSite(id) {
+  const values = dpReadFormFields(SITE_FIELDS);
+  const missing = dpValidateRequired(SITE_FIELDS, values);
+  if (missing.length) { alert("Champ requis manquant : " + missing.map(f => f.label).join(", ")); return; }
+
+  if (values.surfaceM2 && values.effectif) {
+    values.ratioM2ParPoste = Math.round((values.surfaceM2 / values.effectif) * 100) / 100;
+  } else {
+    values.ratioM2ParPoste = null;
+  }
+
+  if (id) {
+    const idx = DP.sites.findIndex(x => x.id === id);
+    DP.sites[idx] = { ...DP.sites[idx], ...values };
+  } else {
+    DP.sites.push({ id: dpGenId("site"), ...values });
+  }
+  dpAutoSync();
+  closeDrawer();
+  render();
+}
+
+function deleteSite(id) {
+  if (!confirm("Supprimer définitivement ce site ?")) return;
+  DP.sites = DP.sites.filter(x => x.id !== id);
+  dpAutoSync();
+  closeDrawer();
+  render();
 }
 
 function closeDrawer() { document.getElementById("drawer-holder").innerHTML = ""; }
