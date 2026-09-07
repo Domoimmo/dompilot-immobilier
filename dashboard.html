@@ -34,6 +34,11 @@ function render() {
   annuaire.forEach(a => { if (a.categoriePrestation) parCategoriePrestation[a.categoriePrestation] = (parCategoriePrestation[a.categoriePrestation] || 0) + 1; });
   const nbCategoriesPrestations = Object.keys(parCategoriePrestation).length;
 
+  const echeances = contrats.map(c => ({ c, info: dpEcheanceInfo(c.dateEcheance) }));
+  const echus = echeances.filter(e => e.info.days !== null && e.info.days < 0);
+  const proches = echeances.filter(e => e.info.days !== null && e.info.days >= 0 && e.info.days <= 60);
+  const aSurveiller = echus.concat(proches).sort((a, b) => a.info.days - b.info.days).slice(0, 8);
+
   content.innerHTML = `
     <div class="grid-4 mb-14" style="margin-bottom:20px;">
       <div class="kpi-card">
@@ -52,11 +57,28 @@ function render() {
         <div class="kpi-sub">${dpFormatNumber(surfaceTotale && effectifTotal ? surfaceTotale / effectifTotal : 0, 1)} m&sup2; / poste en moyenne</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Contrats de fonctionnement</div>
-        <div class="kpi-value">${contrats.length}</div>
-        <div class="kpi-sub">${contrats.filter(c => c.etat === "E").length} actifs (état E)</div>
+        <div class="kpi-label">Échéances à surveiller</div>
+        <div class="kpi-value" style="color:${echus.length ? 'var(--rouge)' : 'var(--bleu-fonce)'};">${echus.length + proches.length}</div>
+        <div class="kpi-sub">${echus.length} échu(s), ${proches.length} sous 60 jours</div>
       </div>
     </div>
+
+    ${aSurveiller.length ? `
+    <div class="card mb-14" style="margin-bottom:20px;">
+      <div class="card-title">Contrats à échéance proche ou dépassée</div>
+      <table class="data-table">
+        <thead><tr><th>Contrat</th><th>Fournisseur</th><th>Échéance</th></tr></thead>
+        <tbody>
+          ${aSurveiller.map(({ c, info }) => `
+            <tr onclick="window.location.href='contrats.html'">
+              <td><strong>${dpEsc(c.libelle)}</strong></td>
+              <td>${dpEsc(c.fournisseur)}</td>
+              <td><span class="badge ${info.cls}">${info.label}</span></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>` : ""}
 
     <div class="grid-2">
       <div class="card">
