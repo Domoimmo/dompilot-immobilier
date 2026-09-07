@@ -11,10 +11,10 @@
 <body>
 <script src="app.js?v=7"></script>
 <script>
+let map, markersLayer, mapReady = false;
+
 const content = dpRenderShell("carte", "Carte du patrimoine", "Localisation des sites Domofrance à partir de leur adresse");
 if (content) render();
-
-let map, markersLayer, mapReady = false;
 
 function render() {
   if (!mapReady) {
