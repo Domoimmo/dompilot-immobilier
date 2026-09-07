@@ -10,10 +10,25 @@
 <script src="app.js?v=5"></script>
 <script>
 const urlParams = new URLSearchParams(window.location.search);
-let filtres = { type: "", fournisseur: urlParams.get("fournisseur") || "", recherche: "" };
+let filtres = { type: "", fournisseur: urlParams.get("fournisseur") || "", echeance: "", recherche: "" };
 
 const content = dpRenderShell("contrats", "Contrats de fonctionnement", "Nettoyage, sécurité, location de matériel, contrôle réglementaire...");
 if (content) render();
+
+const CONTRAT_FIELDS = [
+  { key: "libelle", label: "Libellé", type: "text", required: true },
+  { key: "type", label: "Type", type: "text" },
+  { key: "organisme", label: "Organisme", type: "text" },
+  { key: "ho", label: "Rattachement (HO)", type: "text" },
+  { key: "numero", label: "N° contrat", type: "text" },
+  { key: "referenceExterne", label: "Référence externe", type: "text" },
+  { key: "fournisseur", label: "Fournisseur", type: "text" },
+  { key: "signataire", label: "Signataire", type: "text" },
+  { key: "dateSignature", label: "Date de signature", type: "date" },
+  { key: "dateEcheance", label: "Date d'échéance", type: "date" },
+  { key: "etat", label: "État", type: "text" },
+  { key: "avancement", label: "Avancement", type: "text" }
+];
 
 function render() {
   const types = dpUniqueSorted(DP.contrats.map(c => c.type));
@@ -39,7 +54,18 @@ function render() {
           ${fournisseurs.map(f => `<option value="${dpEsc(f)}" ${filtres.fournisseur === f ? "selected" : ""}>${dpEsc(f)}</option>`).join("")}
         </select>
       </div>
+      <div class="field">
+        <label>Échéance</label>
+        <select id="f-echeance">
+          <option value="">Toutes</option>
+          <option value="echu" ${filtres.echeance === "echu" ? "selected" : ""}>Échu</option>
+          <option value="proche" ${filtres.echeance === "proche" ? "selected" : ""}>Proche (&le; 60 j)</option>
+          <option value="ok" ${filtres.echeance === "ok" ? "selected" : ""}>À jour</option>
+          <option value="non_renseignee" ${filtres.echeance === "non_renseignee" ? "selected" : ""}>Non renseignée</option>
+        </select>
+      </div>
       <div class="filter-count" id="f-count"></div>
+      <button class="btn btn-accent btn-sm" onclick="openContratForm(null)">+ Nouveau contrat</button>
     </div>
     <div class="table-wrap"><div id="table-holder"></div></div>
     <div id="drawer-holder"></div>
@@ -48,20 +74,38 @@ function render() {
   document.getElementById("f-recherche").addEventListener("input", dpDebounce(e => { filtres.recherche = e.target.value; renderTable(); }, 150));
   document.getElementById("f-type").addEventListener("change", e => { filtres.type = e.target.value; renderTable(); });
   document.getElementById("f-fournisseur").addEventListener("change", e => { filtres.fournisseur = e.target.value; renderTable(); });
+  document.getElementById("f-echeance").addEventListener("change", e => { filtres.echeance = e.target.value; renderTable(); });
 
   renderTable();
+}
+
+function echeanceMatch(c, filtre) {
+  if (!filtre) return true;
+  const info = dpEcheanceInfo(c.dateEcheance);
+  if (filtre === "non_renseignee") return info.days === null;
+  if (filtre === "echu") return info.days !== null && info.days < 0;
+  if (filtre === "proche") return info.days !== null && info.days >= 0 && info.days <= 60;
+  if (filtre === "ok") return info.days !== null && info.days > 60;
+  return true;
 }
 
 function filteredContrats() {
   return DP.contrats.filter(c => {
     if (filtres.type && c.type !== filtres.type) return false;
     if (filtres.fournisseur && c.fournisseur !== filtres.fournisseur) return false;
+    if (!echeanceMatch(c, filtres.echeance)) return false;
     if (filtres.recherche) {
       const q = filtres.recherche.toLowerCase();
       if (!((c.libelle + " " + c.numero + " " + c.referenceExterne + " " + c.fournisseur).toLowerCase().includes(q))) return false;
     }
     return true;
-  }).sort((a, b) => (b.dateSignature || "").localeCompare(a.dateSignature || ""));
+  }).sort((a, b) => {
+    const ia = dpEcheanceInfo(a.dateEcheance).days, ib = dpEcheanceInfo(b.dateEcheance).days;
+    if (ia === null && ib === null) return (b.dateSignature || "").localeCompare(a.dateSignature || "");
+    if (ia === null) return 1;
+    if (ib === null) return -1;
+    return ia - ib;
+  });
 }
 
 function renderTable() {
@@ -76,58 +120,75 @@ function renderTable() {
   document.getElementById("table-holder").innerHTML = `
     <table class="data-table">
       <thead><tr>
-        <th>Libellé</th><th>Type</th><th>Fournisseur</th><th>N&deg; contrat</th><th>Signature</th><th>Avancement</th>
+        <th>Libellé</th><th>Type</th><th>Fournisseur</th><th>N&deg; contrat</th><th>Signature</th><th>Échéance</th>
       </tr></thead>
       <tbody>
-        ${list.map(c => `
-          <tr onclick="openContrat('${c.id}')">
+        ${list.map(c => {
+          const ech = dpEcheanceInfo(c.dateEcheance);
+          return `
+          <tr onclick="openContratForm('${c.id}')">
             <td><strong>${dpEsc(c.libelle)}</strong><div class="text-muted">${dpEsc(c.ho)}</div></td>
             <td><span class="badge badge-blue">${dpEsc(c.type)}</span></td>
             <td>${dpEsc(c.fournisseur)}</td>
             <td>${dpEsc(c.numero)}</td>
             <td>${dpFormatDate(c.dateSignature)}</td>
-            <td>${c.avancement === "Validé" ? '<span class="badge badge-green">Validé</span>' : dpEsc(c.avancement || "&mdash;")}</td>
-          </tr>
-        `).join("")}
+            <td><span class="badge ${ech.cls}">${ech.label}</span></td>
+          </tr>`;
+        }).join("")}
       </tbody>
     </table>
   `;
 }
 
-function openContrat(id) {
-  const c = DP.contrats.find(x => x.id === id);
-  if (!c) return;
-  const mois = Object.keys(c.prestationsMensuelles || {});
+function openContratForm(id) {
+  const contrat = id ? DP.contrats.find(x => x.id === id) : { etat: "E" };
+  const isNew = !id;
+  const mois = contrat.prestationsMensuelles ? Object.keys(contrat.prestationsMensuelles) : [];
   document.getElementById("drawer-holder").innerHTML = `
     <div class="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
       <div class="drawer">
         <div class="drawer-header">
-          <div><h2 style="font-size:17px;">${dpEsc(c.libelle)}</h2><span class="badge badge-blue">${dpEsc(c.type)}</span></div>
+          <h2 style="font-size:17px;">${isNew ? "Nouveau contrat" : dpEsc(contrat.libelle)}</h2>
           <button class="drawer-close" onclick="closeDrawer()">&times;</button>
         </div>
-        <div class="drawer-section">
-          <h3>Identification</h3>
-          <div class="kv-row"><span class="k">Organisme</span><span class="v">${dpEsc(c.organisme)}</span></div>
-          <div class="kv-row"><span class="k">Rattachement (HO)</span><span class="v">${dpEsc(c.ho)}</span></div>
-          <div class="kv-row"><span class="k">N&deg; contrat</span><span class="v">${dpEsc(c.numero)}</span></div>
-          <div class="kv-row"><span class="k">Référence externe</span><span class="v">${dpEsc(c.referenceExterne || "&mdash;")}</span></div>
-        </div>
-        <div class="drawer-section">
-          <h3>Fournisseur &amp; signature</h3>
-          <div class="kv-row"><span class="k">Fournisseur</span><span class="v">${dpEsc(c.fournisseur)}</span></div>
-          <div class="kv-row"><span class="k">Signataire</span><span class="v">${dpEsc(c.signataire || "&mdash;")}</span></div>
-          <div class="kv-row"><span class="k">Date de signature</span><span class="v">${dpFormatDate(c.dateSignature)}</span></div>
-          <div class="kv-row"><span class="k">État</span><span class="v">${dpEsc(c.etat)}</span></div>
+        <div id="contrat-form">${dpRenderFormFields(CONTRAT_FIELDS, contrat)}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="saveContrat('${id || ""}')">Enregistrer</button>
+          ${!isNew ? `<button class="btn btn-outline btn-sm" onclick="deleteContrat('${id}')" style="color:var(--rouge);border-color:var(--rouge-clair);">Supprimer</button>` : ""}
+          <button class="btn btn-outline btn-sm" onclick="closeDrawer()">Annuler</button>
         </div>
         ${mois.length ? `
-        <div class="drawer-section">
-          <h3>Prestations mensuelles renseignées</h3>
-          ${mois.map(m => `<div class="kv-row"><span class="k">${dpEsc(m)}</span><span class="v">${dpEsc(c.prestationsMensuelles[m])}</span></div>`).join("")}
+        <div class="drawer-section mt-18">
+          <h3>Prestations mensuelles (import initial, lecture seule)</h3>
+          ${mois.map(m => `<div class="kv-row"><span class="k">${dpEsc(m)}</span><span class="v">${dpEsc(contrat.prestationsMensuelles[m])}</span></div>`).join("")}
         </div>` : ""}
-        ${c.passageAnnuel ? `<div class="drawer-section"><h3>Passage annuel</h3><div>${dpEsc(c.passageAnnuel)}</div></div>` : ""}
       </div>
     </div>
   `;
+}
+
+function saveContrat(id) {
+  const values = dpReadFormFields(CONTRAT_FIELDS);
+  const missing = dpValidateRequired(CONTRAT_FIELDS, values);
+  if (missing.length) { alert("Champ requis manquant : " + missing.map(f => f.label).join(", ")); return; }
+
+  if (id) {
+    const idx = DP.contrats.findIndex(x => x.id === id);
+    DP.contrats[idx] = { ...DP.contrats[idx], ...values };
+  } else {
+    DP.contrats.push({ id: dpGenId("ctr"), prestationsMensuelles: {}, passageAnnuel: "", ...values });
+  }
+  dpAutoSync();
+  closeDrawer();
+  render();
+}
+
+function deleteContrat(id) {
+  if (!confirm("Supprimer définitivement ce contrat ?")) return;
+  DP.contrats = DP.contrats.filter(x => x.id !== id);
+  dpAutoSync();
+  closeDrawer();
+  render();
 }
 
 function closeDrawer() { document.getElementById("drawer-holder").innerHTML = ""; }
