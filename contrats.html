@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 <script>
 const urlParams = new URLSearchParams(window.location.search);
 let filtres = { type: "", fournisseur: urlParams.get("fournisseur") || "", site: urlParams.get("site") || "", echeance: "", recherche: "" };
@@ -83,6 +83,7 @@ function render() {
         </select>
       </div>
       <div class="filter-count" id="f-count"></div>
+      <button class="btn btn-outline btn-sm" onclick="exportContrats()">&#8615; Exporter (Excel)</button>
       <button class="btn btn-accent btn-sm" onclick="openContratForm(null)">+ Nouveau contrat</button>
     </div>
     <div class="table-wrap"><div id="table-holder"></div></div>
@@ -96,6 +97,15 @@ function render() {
   document.getElementById("f-echeance").addEventListener("change", e => { filtres.echeance = e.target.value; renderTable(); });
 
   renderTable();
+}
+
+function exportContrats() {
+  const list = filteredContrats();
+  const headers = ["Libellé", "Type", "Site", "Organisme", "HO", "N° contrat", "Référence externe",
+    "Fournisseur", "Signataire", "Date signature", "Date échéance", "État", "Avancement"];
+  const rows = list.map(c => [c.libelle, c.type, siteNom(c.siteId) || "", c.organisme, c.ho, c.numero,
+    c.referenceExterne, c.fournisseur, c.signataire, c.dateSignature, c.dateEcheance, c.etat, c.avancement]);
+  dpExportCSV(`dompatrimoine_contrats_${dpToday()}.csv`, headers, rows);
 }
 
 function echeanceMatch(c, filtre) {
