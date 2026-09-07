@@ -160,3 +160,13 @@ body.login-page{background:linear-gradient(135deg,var(--bleu-fonce),#123a5e);dis
 .empty-state{text-align:center;padding:40px 20px;color:#8a97a6;}
 .progress-track{background:var(--gris-clair);border-radius:99px;height:7px;overflow:hidden;}
 .progress-fill{height:100%;background:var(--accent);}
+
+/* ---------- Retour en haut ---------- */
+.back-to-top{
+  position:fixed;bottom:26px;right:26px;width:42px;height:42px;border-radius:50%;
+  background:var(--bleu);color:#fff;border:none;display:flex;align-items:center;justify-content:center;
+  font-size:18px;box-shadow:var(--ombre-hover);cursor:pointer;opacity:0;pointer-events:none;
+  transition:opacity .2s ease,transform .15s ease;z-index:40;
+}
+.back-to-top.show{opacity:1;pointer-events:auto;}
+.back-to-top:hover{background:var(--bleu-fonce);transform:translateY(-2px);}
