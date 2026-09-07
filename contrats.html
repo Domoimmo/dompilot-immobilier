@@ -7,32 +7,43 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 <script>
 const urlParams = new URLSearchParams(window.location.search);
-let filtres = { type: "", fournisseur: urlParams.get("fournisseur") || "", echeance: "", recherche: "" };
+let filtres = { type: "", fournisseur: urlParams.get("fournisseur") || "", site: urlParams.get("site") || "", echeance: "", recherche: "" };
 
 const content = dpRenderShell("contrats", "Contrats de fonctionnement", "Nettoyage, sécurité, location de matériel, contrôle réglementaire...");
 if (content) render();
 
-const CONTRAT_FIELDS = [
-  { key: "libelle", label: "Libellé", type: "text", required: true },
-  { key: "type", label: "Type", type: "text" },
-  { key: "organisme", label: "Organisme", type: "text" },
-  { key: "ho", label: "Rattachement (HO)", type: "text" },
-  { key: "numero", label: "N° contrat", type: "text" },
-  { key: "referenceExterne", label: "Référence externe", type: "text" },
-  { key: "fournisseur", label: "Fournisseur", type: "text" },
-  { key: "signataire", label: "Signataire", type: "text" },
-  { key: "dateSignature", label: "Date de signature", type: "date" },
-  { key: "dateEcheance", label: "Date d'échéance", type: "date" },
-  { key: "etat", label: "État", type: "text" },
-  { key: "avancement", label: "Avancement", type: "text" }
-];
+function getContratFields() {
+  const siteOptions = [""].concat(DP.sites.slice().sort((a, b) => a.nom.localeCompare(b.nom, "fr")).map(s => s.id));
+  return [
+    { key: "libelle", label: "Libellé", type: "text", required: true },
+    { key: "siteId", label: "Site rattaché", type: "select", options: siteOptions,
+      optionLabels: { "": "Non rattaché (global / multi-sites)", ...Object.fromEntries(DP.sites.map(s => [s.id, s.nom])) } },
+    { key: "type", label: "Type", type: "text" },
+    { key: "organisme", label: "Organisme", type: "text" },
+    { key: "ho", label: "Rattachement (HO)", type: "text" },
+    { key: "numero", label: "N° contrat", type: "text" },
+    { key: "referenceExterne", label: "Référence externe", type: "text" },
+    { key: "fournisseur", label: "Fournisseur", type: "text" },
+    { key: "signataire", label: "Signataire", type: "text" },
+    { key: "dateSignature", label: "Date de signature", type: "date" },
+    { key: "dateEcheance", label: "Date d'échéance", type: "date" },
+    { key: "etat", label: "État", type: "text" },
+    { key: "avancement", label: "Avancement", type: "text" }
+  ];
+}
+
+function siteNom(siteId) {
+  const s = DP.sites.find(x => x.id === siteId);
+  return s ? s.nom : null;
+}
 
 function render() {
   const types = dpUniqueSorted(DP.contrats.map(c => c.type));
   const fournisseurs = dpUniqueSorted(DP.contrats.map(c => c.fournisseur));
+  const sitesTries = DP.sites.slice().sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 
   content.innerHTML = `
     <div class="filter-bar">
@@ -55,6 +66,13 @@ function render() {
         </select>
       </div>
       <div class="field">
+        <label>Site</label>
+        <select id="f-site">
+          <option value="">Tous</option>
+          ${sitesTries.map(s => `<option value="${dpEsc(s.id)}" ${filtres.site === s.id ? "selected" : ""}>${dpEsc(s.nom)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
         <label>Échéance</label>
         <select id="f-echeance">
           <option value="">Toutes</option>
@@ -74,6 +92,7 @@ function render() {
   document.getElementById("f-recherche").addEventListener("input", dpDebounce(e => { filtres.recherche = e.target.value; renderTable(); }, 150));
   document.getElementById("f-type").addEventListener("change", e => { filtres.type = e.target.value; renderTable(); });
   document.getElementById("f-fournisseur").addEventListener("change", e => { filtres.fournisseur = e.target.value; renderTable(); });
+  document.getElementById("f-site").addEventListener("change", e => { filtres.site = e.target.value; renderTable(); });
   document.getElementById("f-echeance").addEventListener("change", e => { filtres.echeance = e.target.value; renderTable(); });
 
   renderTable();
@@ -93,6 +112,7 @@ function filteredContrats() {
   return DP.contrats.filter(c => {
     if (filtres.type && c.type !== filtres.type) return false;
     if (filtres.fournisseur && c.fournisseur !== filtres.fournisseur) return false;
+    if (filtres.site && c.siteId !== filtres.site) return false;
     if (!echeanceMatch(c, filtres.echeance)) return false;
     if (filtres.recherche) {
       const q = filtres.recherche.toLowerCase();
@@ -120,18 +140,19 @@ function renderTable() {
   document.getElementById("table-holder").innerHTML = `
     <table class="data-table">
       <thead><tr>
-        <th>Libellé</th><th>Type</th><th>Fournisseur</th><th>N&deg; contrat</th><th>Signature</th><th>Échéance</th>
+        <th>Libellé</th><th>Type</th><th>Site</th><th>Fournisseur</th><th>N&deg; contrat</th><th>Échéance</th>
       </tr></thead>
       <tbody>
         ${list.map(c => {
           const ech = dpEcheanceInfo(c.dateEcheance);
+          const site = siteNom(c.siteId);
           return `
           <tr onclick="openContratForm('${c.id}')">
             <td><strong>${dpEsc(c.libelle)}</strong><div class="text-muted">${dpEsc(c.ho)}</div></td>
             <td><span class="badge badge-blue">${dpEsc(c.type)}</span></td>
+            <td>${site ? dpEsc(site) : '<span class="text-muted">Non rattaché</span>'}</td>
             <td>${dpEsc(c.fournisseur)}</td>
             <td>${dpEsc(c.numero)}</td>
-            <td>${dpFormatDate(c.dateSignature)}</td>
             <td><span class="badge ${ech.cls}">${ech.label}</span></td>
           </tr>`;
         }).join("")}
@@ -141,7 +162,7 @@ function renderTable() {
 }
 
 function openContratForm(id) {
-  const contrat = id ? DP.contrats.find(x => x.id === id) : { etat: "E" };
+  const contrat = id ? DP.contrats.find(x => x.id === id) : { etat: "E", siteId: "" };
   const isNew = !id;
   const mois = contrat.prestationsMensuelles ? Object.keys(contrat.prestationsMensuelles) : [];
   document.getElementById("drawer-holder").innerHTML = `
@@ -151,7 +172,7 @@ function openContratForm(id) {
           <h2 style="font-size:17px;">${isNew ? "Nouveau contrat" : dpEsc(contrat.libelle)}</h2>
           <button class="drawer-close" onclick="closeDrawer()">&times;</button>
         </div>
-        <div id="contrat-form">${dpRenderFormFields(CONTRAT_FIELDS, contrat)}</div>
+        <div id="contrat-form">${dpRenderFormFields(getContratFields(), contrat)}</div>
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="saveContrat('${id || ""}')">Enregistrer</button>
           ${!isNew ? `<button class="btn btn-outline btn-sm" onclick="deleteContrat('${id}')" style="color:var(--rouge);border-color:var(--rouge-clair);">Supprimer</button>` : ""}
@@ -168,8 +189,9 @@ function openContratForm(id) {
 }
 
 function saveContrat(id) {
-  const values = dpReadFormFields(CONTRAT_FIELDS);
-  const missing = dpValidateRequired(CONTRAT_FIELDS, values);
+  const fields = getContratFields();
+  const values = dpReadFormFields(fields);
+  const missing = dpValidateRequired(fields, values);
   if (missing.length) { alert("Champ requis manquant : " + missing.map(f => f.label).join(", ")); return; }
 
   if (id) {
