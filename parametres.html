@@ -3,146 +3,89 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Paramètres — DomPilot</title>
+<title>Paramètres — DomPatrimoine</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=1"></script>
 <script>
-const content = dpRenderShell("parametres", "Paramètres", "Connexion GitHub, utilisateurs et référentiels");
+const content = dpRenderShell("parametres", "Paramètres", "Utilisateurs, données locales et évolutions prévues");
 if (content) render();
 
 function render() {
   const cfg = dpGetGithubConfig() || {};
-  // On relit l'utilisateur courant depuis DP (et pas seulement la session, qui peut être
-  // périmée si le statut admin a changé après la dernière connexion).
-  const session = dpGetSession();
-  const currentUser = DP.utilisateurs.find(u => u.identifiant === session.identifiant) || session;
-  const isAdmin = !!currentUser.isAdmin;
-
   content.innerHTML = `
     <div class="grid-2">
       <div class="card">
         <div class="card-title">Dépôt privé de données</div>
         <div class="text-muted mb-14">
-          DomPilot fonctionne avec <b>deux dépôts GitHub</b> : celui qui héberge cette application
-          (public, servi par GitHub Pages) et un second, <b>privé</b>, qui contient uniquement le
-          fichier <code>data.json</code> avec les données réelles. Renseignez ci-dessous les
-          coordonnées du dépôt <b>privé</b> uniquement.
+          DomPatrimoine fonctionne avec <b>deux dépôts GitHub</b>, comme DomPilot : celui qui héberge
+          cette application (public, servi par GitHub Pages) et un second, <b>privé</b>, qui contient
+          uniquement le fichier <code>data.json</code>. Renseignez ci-dessous les coordonnées du dépôt
+          <b>privé</b> uniquement.
         </div>
-        <div class="login-error" style="display:block;background:#fbeadb;color:var(--orange);">
-          ⚠ Le token est stocké dans le navigateur (localStorage) pour permettre les appels à l'API
-          GitHub depuis l'app. Utilisez un <b>fine-grained token</b> limité à ce seul dépôt privé,
-          avec uniquement les droits "Contents: Read and write", et évitez de partager cet écran ou
-          les outils de développement du navigateur.
+        <div class="login-error show" style="background:#fbeadb;color:var(--orange);">
+          &#9888; Utilisez un <b>fine-grained token</b> limité à ce seul dépôt privé, avec uniquement les
+          droits "Contents: Read and write", et évitez de partager cet écran ou les outils de
+          développement du navigateur.
         </div>
         <div class="field"><label>Propriétaire du dépôt privé (owner)</label>
-          <input id="g-owner" value="${cfg.owner || ''}" placeholder="ex. domo-bdx"></div>
+          <input id="g-owner" value="${dpEsc(cfg.owner || '')}" placeholder="ex. Domoimmo"></div>
         <div class="field"><label>Nom du dépôt privé</label>
-          <input id="g-repo" value="${cfg.repo || ''}" placeholder="ex. dompilot-immobilier-data"></div>
+          <input id="g-repo" value="${dpEsc(cfg.repo || '')}" placeholder="ex. dompatrimoine-data"></div>
         <div class="field"><label>Chemin du fichier de données</label>
-          <input id="g-path" value="${cfg.path || 'data.json'}"></div>
+          <input id="g-path" value="${dpEsc(cfg.path || 'data.json')}"></div>
         <div class="field"><label>Personal Access Token (fine-grained, ce dépôt uniquement)</label>
-          <input id="g-token" type="password" value="${cfg.token || ''}" placeholder="github_pat_…"></div>
-        <div class="flex gap-8">
-          <button class="btn btn-primary" onclick="saveGithubCfg()">Enregistrer la connexion</button>
-          <button class="btn btn-outline" onclick="dpSyncWithGitHub()">Écrire maintenant</button>
-          <button class="btn btn-outline" onclick="loadNow()">Recharger depuis GitHub</button>
+          <input id="g-token" type="password" value="${dpEsc(cfg.token || '')}" placeholder="github_pat_&hellip;"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" onclick="saveGithubCfg()">Enregistrer la connexion</button>
+          <button class="btn btn-outline btn-sm" onclick="dpSyncWithGitHub()">Écrire maintenant</button>
+          <button class="btn btn-outline btn-sm" onclick="loadNow()">Recharger depuis GitHub</button>
         </div>
       </div>
-
       <div class="card">
-        <div class="flex-between mb-14">
-          <div class="card-title mt-0" style="margin:0;">Utilisateurs</div>
-          ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="addUser()">+ Ajouter</button>` : ""}
+        <div class="card-title">Utilisateurs (démonstration)</div>
+        <div class="text-muted mb-14">
+          Authentification simplifiée pour ce prototype (identifiant seul, sans mot de passe). À remplacer par le
+          même schéma que DomPilot/GESTOCK (hash + sel, ou SSO Domofrance) avant tout déploiement réel.
         </div>
-        <table>
-          <thead><tr><th>Nom</th><th>Identifiant</th><th>Rôle</th><th>Mot de passe</th>${isAdmin ? "<th></th>" : ""}</tr></thead>
+        <table class="data-table">
+          <thead><tr><th>Identifiant</th><th>Nom</th><th>Rôle</th><th>Droits</th></tr></thead>
           <tbody>
             ${DP.utilisateurs.map(u => `
-              <tr>
-                <td>${u.nom} ${u.isAdmin ? `<span class="badge badge-vert" style="margin-left:6px;">Admin</span>` : ""}</td>
-                <td>${u.identifiant}</td>
-                <td>${u.role}</td>
-                <td>${u.passwordHash
-                  ? `<span class="badge badge-vert">Défini</span>`
-                  : `<span class="badge badge-orange">À définir (1ère connexion)</span>`}</td>
-                ${isAdmin ? `
-                <td class="flex gap-8">
-                  ${u.passwordHash ? `<button class="btn btn-sm btn-outline" onclick="resetUserPassword('${u.id}')">Réinitialiser</button>` : ""}
-                  <button class="btn btn-sm ${u.isAdmin ? 'btn-outline' : 'btn-outline'}" onclick="toggleAdmin('${u.id}')">${u.isAdmin ? "Retirer admin" : "Passer admin"}</button>
-                  <button class="btn btn-sm btn-danger" onclick="deleteUser('${u.id}')">Supprimer</button>
-                </td>` : ""}
-              </tr>
+              <tr><td>${dpEsc(u.identifiant)}</td><td>${dpEsc(u.nom)}</td><td>${dpEsc(u.role)}</td>
+              <td>${u.isAdmin ? '<span class="badge badge-green">Admin</span>' : '<span class="badge badge-gray">Standard</span>'}</td></tr>
             `).join("")}
           </tbody>
         </table>
-        <div class="text-muted mt-20">
-          ${isAdmin
-            ? "Un utilisateur ajouté ici devra faire sa « première connexion » (choix de son mot de passe personnel) directement sur la page de connexion. « Réinitialiser » efface son mot de passe actuel : il devra en choisir un nouveau à sa prochaine connexion."
-            : "Seuls les administrateurs peuvent ajouter, modifier ou supprimer des comptes."}
-        </div>
       </div>
-    </div>
 
-    <div class="grid-2 mt-20">
       <div class="card">
-        <div class="card-title">Territoires</div>
-        <div class="flex gap-8" style="flex-wrap:wrap;">
-          ${DP.territoires.map(t => `<span class="badge badge-bleu">${t}</span>`).join("")}
+        <div class="card-title">Données locales</div>
+        <div class="text-muted mb-14">
+          Les données affichées proviennent des fichiers fournis (surfaces des locaux administratifs, contrats de
+          fonctionnement, annuaire des prestataires Bordeaux/Agen/Pau-Bayonne) et sont stockées dans le
+          <code>localStorage</code> de ce navigateur. Toute modification faite dans l'app reste locale à cet appareil.
         </div>
-      </div>
-      <div class="card">
-        <div class="card-title">Référentiel des phases</div>
-        <div class="flex gap-8" style="flex-wrap:wrap;">
-          ${DP.phases.map(p => `<span class="badge ${dpPhaseBadgeClass(p)}">${p}</span>`).join("")}
+        <div class="field-row">
+          <div><span class="badge badge-blue">${DP.sites.length} sites</span></div>
+          <div><span class="badge badge-blue">${DP.contrats.length} contrats</span></div>
+          <div><span class="badge badge-blue">${DP.annuaire.length} contacts</span></div>
+        </div>
+        <div class="mt-18">
+          <button class="btn btn-outline btn-sm" onclick="dpResetDemo()">Réinitialiser les données locales</button>
         </div>
       </div>
     </div>
 
-    <div class="card mt-20">
-      <div class="flex-between mb-14">
-        <div class="card-title mt-0" style="margin:0;">Flex Office — Sites, postes &amp; salles</div>
-        ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="addFlexSite()">+ Ajouter un site</button>` : ""}
+    <div class="card mt-18">
+      <div class="card-title">Évolutions prévues</div>
+      <div class="text-muted" style="line-height:1.7;">
+        &bull; Rattachement direct site &harr; contrats &harr; équipements, en s'appuyant sur le référentiel patrimoine détaillé (sites/bâtiments/niveaux/espaces/équipements) du modèle Camileia.<br>
+        &bull; Suivi des échéances de contrats et alertes de renouvellement (les dates de fin de contrat ne sont pas présentes dans le fichier source actuel).<br>
+        &bull; Authentification réelle (hash + sel comme GESTOCK/DomPilot, ou SSO).<br>
+        &bull; Édition en ligne des fiches site / contrat / contact (le prototype est actuellement en lecture seule sur les données importées).
       </div>
-      ${DP.flexOfficeSites.length === 0 ? `<div class="empty-state">Aucun site configuré.</div>` : DP.flexOfficeSites.map(s => `
-        <div style="border:1px solid var(--gris-bordure);border-radius:9px;padding:12px 14px;margin-bottom:10px;">
-          <div class="flex-between mb-14">
-            <strong style="color:var(--bleu-fonce);">${s.nom}</strong>
-            ${isAdmin ? `<button class="btn btn-sm btn-danger" onclick="deleteFlexSite('${s.id}')">Supprimer le site</button>` : ""}
-          </div>
-          <div class="grid-2">
-            <div>
-              <div class="flex-between mb-14"><span class="text-muted">Postes (${(s.postes||[]).length})</span>
-                ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="addPoste('${s.id}')">+ Poste</button>` : ""}</div>
-              ${(s.postes||[]).map(p => `
-                <div class="flex-between" style="padding:5px 0;font-size:13px;">
-                  <span>${p.nom}</span>
-                  ${isAdmin ? `<button class="btn btn-sm btn-danger" onclick="deletePoste('${s.id}','${p.id}')">✕</button>` : ""}
-                </div>`).join("") || `<div class="text-muted">Aucun poste.</div>`}
-            </div>
-            <div>
-              <div class="flex-between mb-14"><span class="text-muted">Salles de réunion (${(s.salles||[]).length})</span>
-                ${isAdmin ? `<button class="btn btn-sm btn-outline" onclick="addSalle('${s.id}')">+ Salle</button>` : ""}</div>
-              ${(s.salles||[]).map(sa => `
-                <div class="flex-between" style="padding:5px 0;font-size:13px;">
-                  <span>${sa.nom} ${sa.capacite ? `(${sa.capacite} pers.)` : ""}</span>
-                  ${isAdmin ? `<button class="btn btn-sm btn-danger" onclick="deleteSalle('${s.id}','${sa.id}')">✕</button>` : ""}
-                </div>`).join("") || `<div class="text-muted">Aucune salle.</div>`}
-            </div>
-          </div>
-        </div>
-      `).join("")}
-    </div>
-
-    <div class="card mt-20">
-      <div class="card-title">Réinitialisation locale (avancé)</div>
-      <div class="text-muted mb-14">
-        Efface le cache local de ce navigateur (retour au jeu de données vide) et recharge depuis le
-        dépôt privé si la synchronisation GitHub est configurée. À utiliser uniquement en cas de
-        problème d'affichage — n'affecte pas les données déjà synchronisées sur GitHub.
-      </div>
-      <button class="btn btn-danger" onclick="resetLocalCache()">Réinitialiser le cache local</button>
     </div>
   `;
 }
@@ -154,127 +97,14 @@ function saveGithubCfg() {
     path: document.getElementById("g-path").value.trim() || "data.json",
     token: document.getElementById("g-token").value.trim()
   });
-  dpMarkDirtyForSync();
-  alert("Connexion GitHub enregistrée.");
+  alert("Connexion enregistrée.");
+  render();
 }
 
 async function loadNow() {
   const ok = await dpLoadFromGitHub();
   alert(ok ? "Données rechargées depuis le dépôt privé." : "Échec du chargement — vérifiez owner/repo/token.");
   if (ok) render();
-}
-
-function currentIsAdmin() {
-  const session = dpGetSession();
-  const u = DP.utilisateurs.find(u => u.identifiant === session.identifiant);
-  return !!(u && u.isAdmin);
-}
-
-function addFlexSite() {
-  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
-  const nom = prompt("Nom du site (ex. Siège Domofrance Bordeaux) :");
-  if (!nom) return;
-  DP.flexOfficeSites.push({ id: dpUid("site"), nom: nom.trim(), postes: [], salles: [] });
-  dpPersist(); render();
-}
-function deleteFlexSite(id) {
-  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
-  if (!confirm("Supprimer ce site et toutes ses réservations liées ?")) return;
-  DP.flexOfficeSites = DP.flexOfficeSites.filter(s => s.id !== id);
-  DP.flexOfficeReservations = DP.flexOfficeReservations.filter(r => r.siteId !== id);
-  dpPersist(); render();
-}
-function addPoste(siteId) {
-  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
-  const nom = prompt("Nom / numéro du poste (ex. Poste 12) :");
-  if (!nom) return;
-  const site = DP.flexOfficeSites.find(s => s.id === siteId);
-  site.postes = site.postes || [];
-  site.postes.push({ id: dpUid("poste"), nom: nom.trim() });
-  dpPersist(); render();
-}
-function deletePoste(siteId, posteId) {
-  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
-  const site = DP.flexOfficeSites.find(s => s.id === siteId);
-  site.postes = site.postes.filter(p => p.id !== posteId);
-  DP.flexOfficeReservations = DP.flexOfficeReservations.filter(r => !(r.siteId === siteId && r.type === "poste" && r.ressourceId === posteId));
-  dpPersist(); render();
-}
-function addSalle(siteId) {
-  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
-  const nom = prompt("Nom de la salle (ex. Salle Garonne) :");
-  if (!nom) return;
-  const capacite = parseInt(prompt("Capacité (nombre de personnes), optionnel :") || "") || null;
-  const site = DP.flexOfficeSites.find(s => s.id === siteId);
-  site.salles = site.salles || [];
-  site.salles.push({ id: dpUid("salle"), nom: nom.trim(), capacite });
-  dpPersist(); render();
-}
-function deleteSalle(siteId, salleId) {
-  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
-  const site = DP.flexOfficeSites.find(s => s.id === siteId);
-  site.salles = site.salles.filter(s => s.id !== salleId);
-  DP.flexOfficeReservations = DP.flexOfficeReservations.filter(r => !(r.siteId === siteId && r.type === "salle" && r.ressourceId === salleId));
-  dpPersist(); render();
-}
-
-function toggleAdmin(id) {
-  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
-  const u = DP.utilisateurs.find(u => u.id === id);
-  if (!u) return;
-  const session = dpGetSession();
-  if (u.identifiant === session.identifiant && u.isAdmin) {
-    if (!confirm("Vous êtes sur le point de retirer vos propres droits admin. Continuer ?")) return;
-  }
-  u.isAdmin = !u.isAdmin;
-  dpPersist();
-  render();
-}
-
-function addUser() {
-  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
-  const nom = prompt("Nom complet du nouvel utilisateur :");
-  if (!nom) return;
-  const identifiant = prompt("Identifiant de connexion (ex. p.durand) :");
-  if (!identifiant) return;
-  if (DP.utilisateurs.some(u => u.identifiant.toLowerCase() === identifiant.trim().toLowerCase())) {
-    alert("Cet identifiant existe déjà.");
-    return;
-  }
-  const role = prompt("Rôle (ex. Chargé d'opérations, Développement, Direction) :", "Chargé d'opérations") || "Collaborateur";
-  DP.utilisateurs.push({
-    id: dpUid("u"), nom: nom.trim(), identifiant: identifiant.trim().toLowerCase(),
-    role, passwordHash: null, salt: null
-  });
-  dpPersist();
-  render();
-}
-
-function resetUserPassword(id) {
-  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
-  const u = DP.utilisateurs.find(u => u.id === id);
-  if (!u) return;
-  if (!confirm(`Réinitialiser le mot de passe de ${u.nom} ? Il/elle devra en choisir un nouveau à la prochaine connexion.`)) return;
-  u.passwordHash = null;
-  u.salt = null;
-  dpPersist();
-  render();
-}
-
-function deleteUser(id) {
-  if (!currentIsAdmin()) { alert("Réservé aux administrateurs."); return; }
-  const u = DP.utilisateurs.find(u => u.id === id);
-  if (!u) return;
-  if (!confirm(`Supprimer l'utilisateur ${u.nom} ?`)) return;
-  DP.utilisateurs = DP.utilisateurs.filter(x => x.id !== id);
-  dpPersist();
-  render();
-}
-
-function resetLocalCache() {
-  if (!confirm("Toutes les données locales seront perdues. Continuer ?")) return;
-  localStorage.removeItem(DP_STORAGE_KEY);
-  window.location.reload();
 }
 </script>
 </body>
