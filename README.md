@@ -34,12 +34,29 @@ Deux fichiers n'ont pas été repris :
 
 ## Pages
 
-- `index.html` — connexion (identifiant seul, pas de mot de passe : c'est un prototype)
-- `dashboard.html` — KPIs : surfaces, effectifs, contrats par type, top fournisseurs
-- `patrimoine.html` — liste des sites, filtrable par catégorie/département, fiche détail
-- `contrats.html` — liste des contrats, filtrable par type/fournisseur, fiche détail
-- `annuaire.html` — annuaire des prestataires, filtrable par secteur/catégorie de prestation
-- `parametres.html` — utilisateurs démo, réinitialisation des données, évolutions prévues
+- `index.html` — connexion (identifiant seul, pas de mot de passe : prototype)
+- `dashboard.html` — KPIs, alertes d'échéances de contrats, contrats par type, top fournisseurs
+- `patrimoine.html` — sites : liste, filtres, **création/édition/suppression**
+- `carte.html` — localisation des sites (Leaflet + OpenStreetMap/Nominatim)
+- `contrats.html` — contrats : liste, filtres (dont échéance), **création/édition/suppression**, badge d'échéance
+- `annuaire.html` — prestataires : liste, filtres, **création/édition/suppression**
+- `parametres.html` — connexion GitHub, utilisateurs, réinitialisation des données
+
+## Échéances de contrats
+
+Le fichier source (`CONTRATS.xlsx`) ne contenait pas de date de fin de contrat. Un champ
+`dateEcheance` a été ajouté (vide par défaut) : à renseigner manuellement depuis la fiche contrat.
+Une fois renseignée, elle alimente :
+- le badge d'échéance dans la liste des contrats (vert = à jour, orange = &le; 60 jours, rouge = échu),
+- le filtre "Échéance",
+- la carte "Contrats à échéance proche ou dépassée" du tableau de bord.
+
+## Édition des données
+
+Chaque module (Patrimoine, Contrats, Annuaire) permet désormais de **créer, modifier et supprimer**
+des enregistrements directement depuis l'app (bouton "+ Nouveau..." et clic sur une ligne). Les
+modifications sont persistées dans le `localStorage` du navigateur, et **synchronisées automatiquement
+sur GitHub** si un dépôt de données est configuré dans Paramètres (sinon elles restent locales).
 
 ## Comptes de démonstration
 
