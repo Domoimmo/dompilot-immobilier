@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 <script>
 let filtres = { categorie: "", departement: "", recherche: "" };
 
@@ -107,6 +107,7 @@ function renderTable() {
 function openSiteForm(id) {
   const site = id ? DP.sites.find(x => x.id === id) : { categorie: "Agence" };
   const isNew = !id;
+  const contratsLies = id ? DP.contrats.filter(c => c.siteId === id) : [];
   document.getElementById("drawer-holder").innerHTML = `
     <div class="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
       <div class="drawer">
@@ -121,6 +122,16 @@ function openSiteForm(id) {
           <button class="btn btn-outline btn-sm" onclick="closeDrawer()">Annuler</button>
         </div>
         ${site.ratioM2ParPoste ? `<div class="text-muted mt-18">Ratio m&sup2;/poste actuel : ${dpFormatNumber(site.ratioM2ParPoste, 1)} (recalculé automatiquement si vous modifiez surface/effectif et enregistrez).</div>` : ""}
+        ${!isNew ? `
+        <div class="drawer-section mt-18">
+          <h3>Contrats rattachés (${contratsLies.length})</h3>
+          ${contratsLies.length ? contratsLies.map(c => `
+            <div class="kv-row" style="cursor:pointer;" onclick="window.location.href='contrats.html?site=${encodeURIComponent(id)}'">
+              <span class="k">${dpEsc(c.libelle)}</span><span class="v">${dpEsc(c.fournisseur)}</span>
+            </div>
+          `).join("") : `<div class="text-muted">Aucun contrat rattaché à ce site pour le moment.</div>`}
+          ${contratsLies.length ? `<a href="contrats.html?site=${encodeURIComponent(id)}" class="btn btn-outline btn-sm mt-18">Voir dans Contrats &rarr;</a>` : ""}
+        </div>` : ""}
       </div>
     </div>
   `;
@@ -149,7 +160,12 @@ function saveSite(id) {
 }
 
 function deleteSite(id) {
-  if (!confirm("Supprimer définitivement ce site ?")) return;
+  const nbContrats = DP.contrats.filter(c => c.siteId === id).length;
+  const msg = nbContrats
+    ? `Supprimer définitivement ce site ? ${nbContrats} contrat(s) rattaché(s) seront détachés (non supprimés).`
+    : "Supprimer définitivement ce site ?";
+  if (!confirm(msg)) return;
+  DP.contrats.forEach(c => { if (c.siteId === id) c.siteId = ""; });
   DP.sites = DP.sites.filter(x => x.id !== id);
   dpAutoSync();
   closeDrawer();
