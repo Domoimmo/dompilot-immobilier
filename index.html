@@ -7,36 +7,107 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body class="login-page">
-<script src="app.js?v=9"></script>
-<div class="login-box">
+<script src="app.js?v=11"></script>
+
+<div class="login-box" id="login-panel">
   <div class="logo-mark">DP</div>
   <h1>DomPatrimoine</h1>
   <div class="sub">Services Généraux &middot; Gestion du patrimoine tertiaire</div>
-  <div id="login-error" class="login-error">Identifiant inconnu. Essayez s.moreau ou t.dupuis.</div>
+  <div id="login-error" class="login-error"></div>
   <div class="field">
     <label>Identifiant</label>
-    <input id="login-id" placeholder="ex. s.moreau" autofocus>
+    <input id="login-id" placeholder="ex. mblain" autofocus>
+  </div>
+  <div class="field">
+    <label>Mot de passe</label>
+    <input id="login-pwd" type="password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
   </div>
   <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="doLogin()">Se connecter</button>
   <div class="login-hint">
-    Prototype local — aucune donnée n'est envoyée vers un serveur. L'authentification par mot de passe
-    et la synchronisation GitHub (pattern GESTOCK/DomPilot) seront ajoutées avant tout déploiement.
-    <br><br>Comptes de démonstration : <strong>s.moreau</strong> (admin), <strong>t.dupuis</strong>.
+    Prototype interne Domofrance — connexion à la base de données automatique (aucun champ technique à
+    renseigner ici).
   </div>
 </div>
+
+<div class="login-box" id="first-login-panel" style="display:none;">
+  <div class="logo-mark">DP</div>
+  <h1>Première connexion</h1>
+  <div class="sub" id="first-login-sub">Pour votre sécurité, choisissez un mot de passe personnel.</div>
+  <div id="first-login-error" class="login-error"></div>
+  <div class="field">
+    <label>Nouveau mot de passe</label>
+    <input id="new-pwd" type="password" placeholder="8 caractères minimum">
+  </div>
+  <div class="field">
+    <label>Confirmer le mot de passe</label>
+    <input id="new-pwd-confirm" type="password">
+  </div>
+  <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="doSetPassword()">Valider</button>
+  <button class="btn btn-outline btn-sm mt-18" style="width:100%;justify-content:center" onclick="backToLogin()">Annuler</button>
+</div>
+
 <script>
 if (dpGetSession()) window.location.href = "dashboard.html";
 
-document.getElementById("login-id").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+let pendingIdentifiant = null;
 
-function doLogin() {
+document.getElementById("login-pwd").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+document.getElementById("new-pwd-confirm").addEventListener("keydown", e => { if (e.key === "Enter") doSetPassword(); });
+
+async function doLogin() {
   const id = document.getElementById("login-id").value.trim();
+  const pwd = document.getElementById("login-pwd").value;
   const errEl = document.getElementById("login-error");
-  if (dpLogin(id)) {
-    window.location.href = "dashboard.html";
-  } else {
-    errEl.classList.add("show");
+  errEl.classList.remove("show");
+
+  if (!id || !pwd) {
+    if (!id) { errEl.textContent = "Merci de renseigner votre identifiant."; errEl.classList.add("show"); return; }
   }
+
+  const result = await dpAttemptLogin(id, pwd);
+
+  if (result.status === "notfound") {
+    errEl.textContent = "Identifiant inconnu.";
+    errEl.classList.add("show");
+  } else if (result.status === "wrongpassword") {
+    errEl.textContent = "Mot de passe incorrect.";
+    errEl.classList.add("show");
+  } else if (result.status === "firstlogin") {
+    pendingIdentifiant = result.user.identifiant;
+    document.getElementById("first-login-sub").textContent =
+      `Bienvenue ${result.user.nom} — pour votre sécurité, choisissez un mot de passe personnel.`;
+    document.getElementById("login-panel").style.display = "none";
+    document.getElementById("first-login-panel").style.display = "block";
+    document.getElementById("new-pwd").focus();
+  } else if (result.status === "ok") {
+    window.location.href = "dashboard.html";
+  }
+}
+
+async function doSetPassword() {
+  const pwd = document.getElementById("new-pwd").value;
+  const confirm = document.getElementById("new-pwd-confirm").value;
+  const errEl = document.getElementById("first-login-error");
+  errEl.classList.remove("show");
+
+  if (pwd.length < 8) {
+    errEl.textContent = "Le mot de passe doit contenir au moins 8 caractères.";
+    errEl.classList.add("show");
+    return;
+  }
+  if (pwd !== confirm) {
+    errEl.textContent = "Les deux mots de passe ne correspondent pas.";
+    errEl.classList.add("show");
+    return;
+  }
+  await dpSetPassword(pendingIdentifiant, pwd, true);
+  window.location.href = "dashboard.html";
+}
+
+function backToLogin() {
+  document.getElementById("first-login-panel").style.display = "none";
+  document.getElementById("login-panel").style.display = "block";
+  document.getElementById("login-pwd").value = "";
 }
 </script>
 </body>
