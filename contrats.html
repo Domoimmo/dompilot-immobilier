@@ -7,13 +7,13 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 <script>
-const content = dpRenderShell("contrats", "Contrats de fonctionnement", "Nettoyage, sécurité, location de matériel, contrôle réglementaire...");
-if (content) render();
-
 const urlParams = new URLSearchParams(window.location.search);
 let filtres = { type: "", fournisseur: urlParams.get("fournisseur") || "", recherche: "" };
+
+const content = dpRenderShell("contrats", "Contrats de fonctionnement", "Nettoyage, sécurité, location de matériel, contrôle réglementaire...");
+if (content) render();
 
 function render() {
   const types = dpUniqueSorted(DP.contrats.map(c => c.type));
