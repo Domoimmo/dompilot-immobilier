@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 <script>
 let filtres = { secteur: "", categorie: "", recherche: "" };
 
@@ -122,6 +122,7 @@ function renderTable() {
 function openContactForm(id) {
   const contact = id ? DP.annuaire.find(x => x.id === id) : { secteur: "BORDEAUX" };
   const isNew = !id;
+  const contratsLies = id ? DP.contrats.filter(c => c.contactId === id) : [];
   document.getElementById("drawer-holder").innerHTML = `
     <div class="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
       <div class="drawer">
@@ -135,6 +136,15 @@ function openContactForm(id) {
           ${!isNew ? `<button class="btn btn-outline btn-sm" onclick="deleteContact('${id}')" style="color:var(--rouge);border-color:var(--rouge-clair);">Supprimer</button>` : ""}
           <button class="btn btn-outline btn-sm" onclick="closeDrawer()">Annuler</button>
         </div>
+        ${!isNew ? `
+        <div class="drawer-section mt-18">
+          <h3>Contrats rattachés (${contratsLies.length})</h3>
+          ${contratsLies.length ? contratsLies.map(c => `
+            <div class="kv-row" style="cursor:pointer;" onclick="window.location.href='contrats.html'">
+              <span class="k">${dpEsc(c.libelle)}</span><span class="v">${dpEsc(c.fournisseur)}</span>
+            </div>
+          `).join("") : `<div class="text-muted">Aucun contrat rattaché à ce contact pour le moment.</div>`}
+        </div>` : ""}
       </div>
     </div>
   `;
@@ -157,7 +167,12 @@ function saveContact(id) {
 }
 
 function deleteContact(id) {
-  if (!confirm("Supprimer définitivement ce contact ?")) return;
+  const nbContrats = DP.contrats.filter(c => c.contactId === id).length;
+  const msg = nbContrats
+    ? `Supprimer définitivement ce contact ? ${nbContrats} contrat(s) rattaché(s) seront détachés (non supprimés).`
+    : "Supprimer définitivement ce contact ?";
+  if (!confirm(msg)) return;
+  DP.contrats.forEach(c => { if (c.contactId === id) c.contactId = ""; });
   DP.annuaire = DP.annuaire.filter(x => x.id !== id);
   dpAutoSync();
   closeDrawer();
