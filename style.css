@@ -170,3 +170,8 @@ body.login-page{background:linear-gradient(135deg,var(--bleu-fonce),#123a5e);dis
 }
 .back-to-top.show{opacity:1;pointer-events:auto;}
 .back-to-top:hover{background:var(--bleu-fonce);transform:translateY(-2px);}
+
+/* ---------- Gantt ---------- */
+.gantt-row:hover .gantt-bar{filter:brightness(1.08);}
+.gantt-bar{transition:filter .1s ease;}
+.gantt-tick{position:absolute;top:0;bottom:0;border-left:1px solid var(--gris-bordure);}
