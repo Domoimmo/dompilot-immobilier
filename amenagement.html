@@ -34,6 +34,7 @@ const ETAPE_FIELDS = [
 const urlParams = new URLSearchParams(window.location.search);
 const currentAmenagementId = urlParams.get("id");
 let filtres = { statut: "", site: "", recherche: "" };
+let ganttScale = "mois";
 
 const content = dpRenderShell("amenagement", "Aménagement immobilier",
   currentAmenagementId ? "Planning de chantier — étapes et corps de métier" : "Chantiers et travaux d'aménagement, planning par étapes");
@@ -259,9 +260,15 @@ function renderDetail(id) {
     <div class="card mb-14" style="margin-bottom:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
         <div class="card-title" style="margin-bottom:0;">Planning (Gantt)</div>
-        <button class="btn btn-accent btn-sm" onclick="openEtapeForm(null)">+ Nouvelle étape</button>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <div style="display:flex;border:1px solid var(--gris-bordure);border-radius:7px;overflow:hidden;">
+            <button class="btn btn-sm" style="border-radius:0;background:${ganttScale === 'mois' ? 'var(--bleu)' : '#fff'};color:${ganttScale === 'mois' ? '#fff' : 'var(--gris-texte)'};" onclick="setGanttScale('mois')">Mois</button>
+            <button class="btn btn-sm" style="border-radius:0;background:${ganttScale === 'semaine' ? 'var(--bleu)' : '#fff'};color:${ganttScale === 'semaine' ? '#fff' : 'var(--gris-texte)'};" onclick="setGanttScale('semaine')">Semaine</button>
+          </div>
+          <button class="btn btn-accent btn-sm" onclick="openEtapeForm(null)">+ Nouvelle étape</button>
+        </div>
       </div>
-      ${etapes.length ? renderGantt(etapes) : `<div class="table-empty">Ajoutez des étapes pour voir apparaître le planning.</div>`}
+      ${etapes.length ? renderGantt(etapes, ganttScale) : `<div class="table-empty">Ajoutez des étapes pour voir apparaître le planning.</div>`}
     </div>
 
     <div class="table-wrap">
@@ -287,7 +294,12 @@ function renderDetail(id) {
   `;
 }
 
-function renderGantt(etapes) {
+function setGanttScale(scale) {
+  ganttScale = scale;
+  render();
+}
+
+function renderGantt(etapes, scale) {
   const dates = [];
   etapes.forEach(e => { if (e.dateDebut) dates.push(new Date(e.dateDebut)); if (e.dateFin) dates.push(new Date(e.dateFin)); });
   if (!dates.length) return `<div class="table-empty">Renseignez des dates sur les étapes pour afficher le planning.</div>`;
@@ -303,21 +315,35 @@ function renderGantt(etapes) {
   const pct = d => Math.min(100, Math.max(0, ((new Date(d) - min) / totalMs) * 100));
 
   const ticks = [];
-  let t = new Date(min.getFullYear(), min.getMonth(), 1);
-  while (t <= max) {
-    ticks.push(new Date(t));
-    t = new Date(t.getFullYear(), t.getMonth() + 1, 1);
+  if (scale === "semaine") {
+    let t = new Date(min);
+    const day = t.getDay();
+    t.setDate(t.getDate() + (day === 0 ? -6 : 1 - day)); // lundi de la semaine de min
+    while (t <= max) {
+      ticks.push(new Date(t));
+      t = new Date(t); t.setDate(t.getDate() + 7);
+    }
+  } else {
+    let t = new Date(min.getFullYear(), min.getMonth(), 1);
+    while (t <= max) {
+      ticks.push(new Date(t));
+      t = new Date(t.getFullYear(), t.getMonth() + 1, 1);
+    }
   }
+  const tickLabel = t => scale === "semaine"
+    ? t.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })
+    : t.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
 
   const labelWidth = 230;
+  const minTimelineWidth = scale === "semaine" ? Math.max(500, ticks.length * 64) : Math.max(420, ticks.length * 80);
 
   return `
     <div style="overflow-x:auto;">
-      <div style="min-width:640px;">
+      <div style="min-width:${labelWidth + minTimelineWidth}px;">
         <div style="display:flex;">
           <div style="width:${labelWidth}px;flex-shrink:0;"></div>
           <div style="flex:1;position:relative;height:22px;">
-            ${ticks.map(tk => `<div class="gantt-tick" style="left:${pct(tk)}%;"></div><div style="position:absolute;left:${pct(tk)}%;top:0;font-size:11px;color:#7c8b9b;padding-left:4px;">${tk.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })}</div>`).join("")}
+            ${ticks.map(tk => `<div class="gantt-tick" style="left:${pct(tk)}%;"></div><div style="position:absolute;left:${pct(tk)}%;top:0;font-size:11px;color:#7c8b9b;padding-left:4px;white-space:nowrap;">${tickLabel(tk)}</div>`).join("")}
           </div>
         </div>
         ${etapes.map(e => {
