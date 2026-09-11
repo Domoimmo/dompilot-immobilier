@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 <script>
 const urlParams = new URLSearchParams(window.location.search);
 let filtres = { type: "", fournisseur: urlParams.get("fournisseur") || "", site: urlParams.get("site") || "", echeance: "", recherche: "" };
@@ -17,6 +17,10 @@ if (content) render();
 
 function getContratFields() {
   const siteOptions = [""].concat(DP.sites.slice().sort((a, b) => a.nom.localeCompare(b.nom, "fr")).map(s => s.id));
+  const annuaireTrie = DP.annuaire.slice().sort((a, b) => a.entreprise.localeCompare(b.entreprise, "fr"));
+  const contactOptions = [""].concat(annuaireTrie.map(a => a.id));
+  const contactLabels = { "": "Non rattaché" };
+  annuaireTrie.forEach(a => { contactLabels[a.id] = `${a.entreprise}${a.contact ? " — " + a.contact : ""}`; });
   return [
     { key: "libelle", label: "Libellé", type: "text", required: true },
     { key: "siteId", label: "Site rattaché", type: "select", options: siteOptions,
@@ -27,6 +31,7 @@ function getContratFields() {
     { key: "numero", label: "N° contrat", type: "text" },
     { key: "referenceExterne", label: "Référence externe", type: "text" },
     { key: "fournisseur", label: "Fournisseur", type: "text" },
+    { key: "contactId", label: "Contact annuaire", type: "select", options: contactOptions, optionLabels: contactLabels },
     { key: "signataire", label: "Signataire", type: "text" },
     { key: "dateSignature", label: "Date de signature", type: "date" },
     { key: "dateEcheance", label: "Date d'échéance", type: "date" },
@@ -171,6 +176,7 @@ function openContratForm(id) {
   const contrat = id ? DP.contrats.find(x => x.id === id) : { etat: "E", siteId: "" };
   const isNew = !id;
   const mois = contrat.prestationsMensuelles ? Object.keys(contrat.prestationsMensuelles) : [];
+  const suggestions = (!contrat.contactId && contrat.fournisseur) ? suggestAnnuaireMatches(contrat.fournisseur) : [];
   document.getElementById("drawer-holder").innerHTML = `
     <div class="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
       <div class="drawer">
@@ -179,11 +185,17 @@ function openContratForm(id) {
           <button class="drawer-close" onclick="closeDrawer()">&times;</button>
         </div>
         <div id="contrat-form">${dpRenderFormFields(getContratFields(), contrat)}</div>
+        ${suggestions.length ? `
+        <div class="text-muted" style="margin:-6px 0 10px;">
+          Contact annuaire probable :
+          ${suggestions.map(s => `<button type="button" class="btn btn-outline btn-sm" style="margin:2px 4px 2px 0;" onclick="applySuggestion('${s.id}')">${dpEsc(s.entreprise)}</button>`).join("")}
+        </div>` : ""}
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="saveContrat('${id || ""}')">Enregistrer</button>
           ${!isNew ? `<button class="btn btn-outline btn-sm" onclick="deleteContrat('${id}')" style="color:var(--rouge);border-color:var(--rouge-clair);">Supprimer</button>` : ""}
           <button class="btn btn-outline btn-sm" onclick="closeDrawer()">Annuler</button>
         </div>
+        ${contrat.contactId ? renderContactPreview(contrat.contactId) : ""}
         ${mois.length ? `
         <div class="drawer-section mt-18">
           <h3>Prestations mensuelles (import initial, lecture seule)</h3>
@@ -192,6 +204,59 @@ function openContratForm(id) {
       </div>
     </div>
   `;
+}
+
+function renderContactPreview(contactId) {
+  const c = DP.annuaire.find(a => a.id === contactId);
+  if (!c) return "";
+  return `
+    <div class="drawer-section mt-18">
+      <h3>Contact rattaché</h3>
+      <div class="kv-row"><span class="k">Entreprise</span><span class="v">${dpEsc(c.entreprise)}</span></div>
+      ${c.contact ? `<div class="kv-row"><span class="k">Contact</span><span class="v">${dpEsc(c.contact)}</span></div>` : ""}
+      ${c.telephone ? `<div class="kv-row"><span class="k">Téléphone</span><span class="v"><a href="tel:${dpEsc(c.telephone)}">${dpEsc(c.telephone)}</a></span></div>` : ""}
+      ${c.email1 ? `<div class="kv-row"><span class="k">Email</span><span class="v"><a href="mailto:${dpEsc(c.email1)}">${dpEsc(c.email1)}</a></span></div>` : ""}
+      <a href="annuaire.html" class="text-muted">Voir l'annuaire complet &rarr;</a>
+    </div>
+  `;
+}
+
+/* Suggestion de rattachement fournisseur -> annuaire (calcul local, aucune donnée envoyée) */
+const DP_MATCH_STOP = new Set(["FRANCE","AQUITAINE","SUD","OUEST","EAU","AGEN","SERVICE","SERVICES","SOLUTIONS","GENERALE","SOCIETE","COMPAGNIE","GROUPE","SAS","SARL","EURL","SA"]);
+
+function dpNormalize(s) {
+  return (s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, " ").trim().toUpperCase();
+}
+function dpTokens(s) {
+  return new Set(dpNormalize(s).split(/\s+/).filter(t => t.length >= 4 && !DP_MATCH_STOP.has(t)));
+}
+
+function suggestAnnuaireMatches(fournisseur) {
+  const nf = dpNormalize(fournisseur);
+  const ft = dpTokens(fournisseur);
+  const seen = new Set();
+  const cands = [];
+  DP.annuaire.forEach(a => {
+    const ent = (a.entreprise || "").trim();
+    if (!ent || seen.has(ent)) return;
+    const ne = dpNormalize(ent);
+    const et = dpTokens(ent);
+    let score = 0;
+    if (ne.length >= 5 && (ne.includes(nf) || nf.includes(ne))) score = 3;
+    else {
+      let common = 0;
+      ft.forEach(t => { if (et.has(t)) common++; });
+      score = common;
+    }
+    if (score >= 2) { cands.push({ score, id: a.id, entreprise: ent }); seen.add(ent); }
+  });
+  cands.sort((a, b) => b.score - a.score);
+  return cands.slice(0, 3);
+}
+
+function applySuggestion(contactId) {
+  const sel = document.getElementById("ff-contactId");
+  if (sel) sel.value = contactId;
 }
 
 function saveContrat(id) {
