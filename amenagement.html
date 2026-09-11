@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aménagement — DomPatrimoine</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="app.js?v=14"></script>
+<script>
+const CORPS_METIER = [
+  "Gros œuvre", "Charpente", "Couverture / Étanchéité", "Menuiserie extérieure",
+  "Menuiserie intérieure", "Plomberie", "Électricité", "CVC / Climatisation",
+  "Plâtrerie / Cloisons", "Peinture / Finitions", "Revêtements de sols",
+  "Serrurerie / Métallerie", "VRD / Aménagements extérieurs", "Nettoyage fin de chantier", "Autre"
+];
+const ETAPE_STATUTS = ["À venir", "En cours", "Terminé", "Retard"];
+const ETAPE_STATUT_COLOR = { "À venir": "#b7c0ca", "En cours": "#0f4c81", "Terminé": "#1f8a70", "Retard": "#c94f4f" };
+const AMGT_STATUTS = ["Planifié", "En cours", "Terminé", "Suspendu"];
+const AMGT_STATUT_BADGE = { "Planifié": "badge-gray", "En cours": "badge-blue", "Terminé": "badge-green", "Suspendu": "badge-orange" };
+
+const ETAPE_FIELDS = [
+  { key: "libelle", label: "Libellé de l'étape", type: "text", required: true },
+  { key: "corpsMetier", label: "Corps de métier", type: "select", options: CORPS_METIER },
+  { key: "dateDebut", label: "Date de début", type: "date", required: true },
+  { key: "dateFin", label: "Date de fin", type: "date", required: true },
+  { key: "statut", label: "Statut", type: "select", options: ETAPE_STATUTS },
+  { key: "avancement", label: "Avancement (%)", type: "number" },
+  { key: "prestataire", label: "Entreprise / prestataire", type: "text" },
+  { key: "commentaire", label: "Commentaire", type: "textarea" }
+];
+
+const urlParams = new URLSearchParams(window.location.search);
+const currentAmenagementId = urlParams.get("id");
+let filtres = { statut: "", site: "", recherche: "" };
+
+const content = dpRenderShell("amenagement", "Aménagement immobilier",
+  currentAmenagementId ? "Planning de chantier — étapes et corps de métier" : "Chantiers et travaux d'aménagement, planning par étapes");
+if (content) render();
+
+function getAmgtFields() {
+  const siteOptions = [""].concat(DP.sites.slice().sort((a, b) => a.nom.localeCompare(b.nom, "fr")).map(s => s.id));
+  return [
+    { key: "nom", label: "Nom du chantier", type: "text", required: true },
+    { key: "siteId", label: "Site concerné", type: "select", options: siteOptions,
+      optionLabels: { "": "Non renseigné", ...Object.fromEntries(DP.sites.map(s => [s.id, s.nom])) } },
+    { key: "dateDebut", label: "Date de début prévisionnelle", type: "date" },
+    { key: "dateFin", label: "Date de fin prévisionnelle", type: "date" },
+    { key: "statut", label: "Statut", type: "select", options: AMGT_STATUTS },
+    { key: "budget", label: "Budget prévisionnel (€)", type: "number" },
+    { key: "description", label: "Description", type: "textarea" }
+  ];
+}
+
+function render() {
+  if (currentAmenagementId) renderDetail(currentAmenagementId);
+  else renderList();
+}
+
+/* ============================= LISTE ============================= */
+
+function renderList() {
+  const sitesTries = DP.sites.slice().sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+
+  content.innerHTML = `
+    <div class="filter-bar">
+      <div class="field search">
+        <label>Recherche</label>
+        <input id="f-recherche" placeholder="Nom du chantier..." value="${dpEsc(filtres.recherche)}">
+      </div>
+      <div class="field">
+        <label>Statut</label>
+        <select id="f-statut">
+          <option value="">Tous</option>
+          ${AMGT_STATUTS.map(s => `<option value="${dpEsc(s)}" ${filtres.statut === s ? "selected" : ""}>${dpEsc(s)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Site</label>
+        <select id="f-site">
+          <option value="">Tous</option>
+          ${sitesTries.map(s => `<option value="${dpEsc(s.id)}" ${filtres.site === s.id ? "selected" : ""}>${dpEsc(s.nom)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="filter-count" id="f-count"></div>
+      <button class="btn btn-outline btn-sm" onclick="exportAmgts()">&#8615; Exporter (Excel)</button>
+      <button class="btn btn-accent btn-sm" onclick="openAmgtForm(null)">+ Nouveau chantier</button>
+    </div>
+    <div class="table-wrap"><div id="table-holder"></div></div>
+    <div id="drawer-holder"></div>
+  `;
+
+  document.getElementById("f-recherche").addEventListener("input", dpDebounce(e => { filtres.recherche = e.target.value; renderTable(); }, 150));
+  document.getElementById("f-statut").addEventListener("change", e => { filtres.statut = e.target.value; renderTable(); });
+  document.getElementById("f-site").addEventListener("change", e => { filtres.site = e.target.value; renderTable(); });
+
+  renderTable();
+}
+
+function amgtAvancement(a) {
+  if (!a.etapes || !a.etapes.length) return 0;
+  const total = a.etapes.reduce((s, e) => s + (Number(e.avancement) || 0), 0);
+  return Math.round(total / a.etapes.length);
+}
+
+function filteredAmgts() {
+  return DP.amenagements.filter(a => {
+    if (filtres.statut && a.statut !== filtres.statut) return false;
+    if (filtres.site && a.siteId !== filtres.site) return false;
+    if (filtres.recherche && !a.nom.toLowerCase().includes(filtres.recherche.toLowerCase())) return false;
+    return true;
+  }).sort((a, b) => (b.dateDebut || "").localeCompare(a.dateDebut || ""));
+}
+
+function renderTable() {
+  const list = filteredAmgts();
+  document.getElementById("f-count").textContent = `${list.length} chantier${list.length > 1 ? "s" : ""}`;
+
+  if (!list.length) {
+    document.getElementById("table-holder").innerHTML = `<div class="table-empty">Aucun chantier pour le moment. Cliquez sur "+ Nouveau chantier" pour en créer un.</div>`;
+    return;
+  }
+
+  document.getElementById("table-holder").innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Chantier</th><th>Site</th><th>Statut</th><th>Début</th><th>Fin prévue</th><th>Étapes</th><th>Avancement</th>
+      </tr></thead>
+      <tbody>
+        ${list.map(a => {
+          const site = DP.sites.find(s => s.id === a.siteId);
+          const av = amgtAvancement(a);
+          return `
+          <tr onclick="window.location.href='amenagement.html?id=${encodeURIComponent(a.id)}'">
+            <td><strong>${dpEsc(a.nom)}</strong></td>
+            <td>${site ? dpEsc(site.nom) : '<span class="text-muted">Non renseigné</span>'}</td>
+            <td><span class="badge ${AMGT_STATUT_BADGE[a.statut] || 'badge-gray'}">${dpEsc(a.statut || "&mdash;")}</span></td>
+            <td>${dpFormatDate(a.dateDebut)}</td>
+            <td>${dpFormatDate(a.dateFin)}</td>
+            <td>${(a.etapes || []).length}</td>
+            <td style="min-width:100px;">
+              <div class="progress-track"><div class="progress-fill" style="width:${av}%"></div></div>
+              <div class="text-muted" style="margin-top:2px;">${av}%</div>
+            </td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function exportAmgts() {
+  const list = filteredAmgts();
+  const headers = ["Nom", "Site", "Statut", "Début", "Fin prévue", "Budget (€)", "Nb étapes", "Avancement (%)", "Description"];
+  const rows = list.map(a => {
+    const site = DP.sites.find(s => s.id === a.siteId);
+    return [a.nom, site ? site.nom : "", a.statut, a.dateDebut, a.dateFin, a.budget, (a.etapes || []).length, amgtAvancement(a), a.description];
+  });
+  dpExportCSV(`dompatrimoine_amenagements_${dpToday()}.csv`, headers, rows);
+}
+
+function openAmgtForm(id) {
+  const amgt = id ? DP.amenagements.find(x => x.id === id) : { statut: "Planifié" };
+  const isNew = !id;
+  document.getElementById("drawer-holder").innerHTML = `
+    <div class="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
+      <div class="drawer">
+        <div class="drawer-header">
+          <h2 style="font-size:17px;">${isNew ? "Nouveau chantier" : dpEsc(amgt.nom)}</h2>
+          <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+        </div>
+        <div>${dpRenderFormFields(getAmgtFields(), amgt)}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="saveAmgt('${id || ""}')">Enregistrer</button>
+          ${!isNew ? `<button class="btn btn-outline btn-sm" onclick="deleteAmgt('${id}')" style="color:var(--rouge);border-color:var(--rouge-clair);">Supprimer</button>` : ""}
+          <button class="btn btn-outline btn-sm" onclick="closeDrawer()">Annuler</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function saveAmgt(id) {
+  const fields = getAmgtFields();
+  const values = dpReadFormFields(fields);
+  const missing = dpValidateRequired(fields, values);
+  if (missing.length) { alert("Champ requis manquant : " + missing.map(f => f.label).join(", ")); return; }
+
+  if (id) {
+    const idx = DP.amenagements.findIndex(x => x.id === id);
+    DP.amenagements[idx] = { ...DP.amenagements[idx], ...values };
+  } else {
+    const newId = dpGenId("amgt");
+    DP.amenagements.push({ id: newId, etapes: [], ...values });
+    dpAutoSync();
+    window.location.href = `amenagement.html?id=${encodeURIComponent(newId)}`;
+    return;
+  }
+  dpAutoSync();
+  closeDrawer();
+  render();
+}
+
+function deleteAmgt(id) {
+  if (!confirm("Supprimer définitivement ce chantier et toutes ses étapes ?")) return;
+  DP.amenagements = DP.amenagements.filter(x => x.id !== id);
+  dpAutoSync();
+  window.location.href = "amenagement.html";
+}
+
+function closeDrawer() { document.getElementById("drawer-holder").innerHTML = ""; }
+
+/* ============================= DÉTAIL + GANTT ============================= */
+
+function renderDetail(id) {
+  const amgt = DP.amenagements.find(a => a.id === id);
+  if (!amgt) {
+    content.innerHTML = `<div class="table-empty">Chantier introuvable. <a href="amenagement.html">Retour à la liste</a></div>`;
+    return;
+  }
+  const site = DP.sites.find(s => s.id === amgt.siteId);
+  const etapes = (amgt.etapes || []).slice().sort((a, b) => (a.dateDebut || "").localeCompare(b.dateDebut || ""));
+  const av = amgtAvancement(amgt);
+
+  content.innerHTML = `
+    <a href="amenagement.html" class="text-muted" style="display:inline-block;margin-bottom:14px;">&larr; Retour aux chantiers</a>
+
+    <div class="card mb-14" style="margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+        <div>
+          <h2 style="font-size:19px;">${dpEsc(amgt.nom)}</h2>
+          <div class="text-muted">${site ? dpEsc(site.nom) : "Site non renseigné"}${amgt.dateDebut ? " &middot; " + dpFormatDate(amgt.dateDebut) + " &rarr; " + dpFormatDate(amgt.dateFin) : ""}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="badge ${AMGT_STATUT_BADGE[amgt.statut] || 'badge-gray'}">${dpEsc(amgt.statut || "&mdash;")}</span>
+          <button class="btn btn-outline btn-sm" onclick="openAmgtForm('${id}')">Modifier</button>
+        </div>
+      </div>
+      ${amgt.description ? `<div class="text-muted mt-18">${dpEsc(amgt.description)}</div>` : ""}
+      <div class="grid-3 mt-18">
+        <div class="kpi-card">
+          <div class="kpi-label">Avancement global</div>
+          <div class="kpi-value">${av}%</div>
+          <div class="progress-track mt-18"><div class="progress-fill" style="width:${av}%"></div></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Étapes</div>
+          <div class="kpi-value">${etapes.length}</div>
+          <div class="kpi-sub">${etapes.filter(e => e.statut === "Terminé").length} terminée(s), ${etapes.filter(e => e.statut === "Retard").length} en retard</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Budget prévisionnel</div>
+          <div class="kpi-value">${amgt.budget ? dpFormatNumber(amgt.budget, 0) + " €" : "&mdash;"}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-14" style="margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div class="card-title" style="margin-bottom:0;">Planning (Gantt)</div>
+        <button class="btn btn-accent btn-sm" onclick="openEtapeForm(null)">+ Nouvelle étape</button>
+      </div>
+      ${etapes.length ? renderGantt(etapes) : `<div class="table-empty">Ajoutez des étapes pour voir apparaître le planning.</div>`}
+    </div>
+
+    <div class="table-wrap">
+      ${etapes.length ? `
+      <table class="data-table">
+        <thead><tr><th>Étape</th><th>Corps de métier</th><th>Début</th><th>Fin</th><th>Statut</th><th>Avancement</th><th>Prestataire</th></tr></thead>
+        <tbody>
+          ${etapes.map(e => `
+            <tr onclick="openEtapeForm('${e.id}')">
+              <td><strong>${dpEsc(e.libelle)}</strong></td>
+              <td>${dpEsc(e.corpsMetier || "&mdash;")}</td>
+              <td>${dpFormatDate(e.dateDebut)}</td>
+              <td>${dpFormatDate(e.dateFin)}</td>
+              <td><span class="badge" style="background:${ETAPE_STATUT_COLOR[e.statut]}22;color:${ETAPE_STATUT_COLOR[e.statut]};">${dpEsc(e.statut || "&mdash;")}</span></td>
+              <td>${e.avancement ?? 0}%</td>
+              <td>${dpEsc(e.prestataire || "&mdash;")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>` : `<div class="table-empty">Aucune étape.</div>`}
+    </div>
+    <div id="drawer-holder"></div>
+  `;
+}
+
+function renderGantt(etapes) {
+  const dates = [];
+  etapes.forEach(e => { if (e.dateDebut) dates.push(new Date(e.dateDebut)); if (e.dateFin) dates.push(new Date(e.dateFin)); });
+  if (!dates.length) return `<div class="table-empty">Renseignez des dates sur les étapes pour afficher le planning.</div>`;
+
+  let min = new Date(Math.min(...dates));
+  let max = new Date(Math.max(...dates));
+  const spanDays = Math.max(1, (max - min) / 86400000);
+  const pad = Math.max(2, Math.round(spanDays * 0.06));
+  min = new Date(min); min.setDate(min.getDate() - pad);
+  max = new Date(max); max.setDate(max.getDate() + pad);
+  const totalMs = max - min;
+
+  const pct = d => Math.min(100, Math.max(0, ((new Date(d) - min) / totalMs) * 100));
+
+  const ticks = [];
+  let t = new Date(min.getFullYear(), min.getMonth(), 1);
+  while (t <= max) {
+    ticks.push(new Date(t));
+    t = new Date(t.getFullYear(), t.getMonth() + 1, 1);
+  }
+
+  const labelWidth = 230;
+
+  return `
+    <div style="overflow-x:auto;">
+      <div style="min-width:640px;">
+        <div style="display:flex;">
+          <div style="width:${labelWidth}px;flex-shrink:0;"></div>
+          <div style="flex:1;position:relative;height:22px;">
+            ${ticks.map(tk => `<div class="gantt-tick" style="left:${pct(tk)}%;"></div><div style="position:absolute;left:${pct(tk)}%;top:0;font-size:11px;color:#7c8b9b;padding-left:4px;">${tk.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })}</div>`).join("")}
+          </div>
+        </div>
+        ${etapes.map(e => {
+          const left = pct(e.dateDebut || min);
+          let width = pct(e.dateFin || min) - left;
+          if (width < 1.5) width = 1.5;
+          const color = ETAPE_STATUT_COLOR[e.statut] || "#b7c0ca";
+          return `
+          <div class="gantt-row" style="display:flex;align-items:center;margin-bottom:8px;">
+            <div style="width:${labelWidth}px;flex-shrink:0;padding-right:10px;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              <strong>${dpEsc(e.libelle)}</strong><br><span class="text-muted">${dpEsc(e.corpsMetier || "")}</span>
+            </div>
+            <div style="flex:1;position:relative;height:28px;background:var(--gris-clair);border-radius:5px;">
+              ${ticks.map(tk => `<div class="gantt-tick" style="left:${pct(tk)}%;"></div>`).join("")}
+              <div class="gantt-bar" title="${dpEsc(e.libelle)} : ${dpFormatDate(e.dateDebut)} &rarr; ${dpFormatDate(e.dateFin)} (${e.avancement || 0}%)"
+                   style="position:absolute;left:${left}%;width:${width}%;top:4px;bottom:4px;border-radius:4px;background:${color};cursor:pointer;overflow:hidden;"
+                   onclick="openEtapeForm('${e.id}')">
+                <div style="height:100%;width:${e.avancement || 0}%;background:rgba(255,255,255,.35);"></div>
+              </div>
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function openEtapeForm(etapeId) {
+  const amgt = DP.amenagements.find(a => a.id === currentAmenagementId);
+  const etape = etapeId ? amgt.etapes.find(e => e.id === etapeId) : { statut: "À venir", avancement: 0 };
+  const isNew = !etapeId;
+  document.getElementById("drawer-holder").innerHTML = `
+    <div class="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
+      <div class="drawer">
+        <div class="drawer-header">
+          <h2 style="font-size:17px;">${isNew ? "Nouvelle étape" : dpEsc(etape.libelle)}</h2>
+          <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+        </div>
+        <div>${dpRenderFormFields(ETAPE_FIELDS, etape)}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="saveEtape('${etapeId || ""}')">Enregistrer</button>
+          ${!isNew ? `<button class="btn btn-outline btn-sm" onclick="deleteEtape('${etapeId}')" style="color:var(--rouge);border-color:var(--rouge-clair);">Supprimer</button>` : ""}
+          <button class="btn btn-outline btn-sm" onclick="closeDrawer()">Annuler</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function saveEtape(etapeId) {
+  const values = dpReadFormFields(ETAPE_FIELDS);
+  const missing = dpValidateRequired(ETAPE_FIELDS, values);
+  if (missing.length) { alert("Champ requis manquant : " + missing.map(f => f.label).join(", ")); return; }
+  if (values.avancement !== null && (values.avancement < 0 || values.avancement > 100)) {
+    alert("L'avancement doit être compris entre 0 et 100.");
+    return;
+  }
+
+  const amgt = DP.amenagements.find(a => a.id === currentAmenagementId);
+  if (!amgt.etapes) amgt.etapes = [];
+  if (etapeId) {
+    const idx = amgt.etapes.findIndex(e => e.id === etapeId);
+    amgt.etapes[idx] = { ...amgt.etapes[idx], ...values };
+  } else {
+    amgt.etapes.push({ id: dpGenId("etp"), ...values });
+  }
+  dpAutoSync();
+  closeDrawer();
+  render();
+}
+
+function deleteEtape(etapeId) {
+  if (!confirm("Supprimer définitivement cette étape ?")) return;
+  const amgt = DP.amenagements.find(a => a.id === currentAmenagementId);
+  amgt.etapes = amgt.etapes.filter(e => e.id !== etapeId);
+  dpAutoSync();
+  closeDrawer();
+  render();
+}
+</script>
+</body>
+</html>
