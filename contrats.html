@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 <script>
 const urlParams = new URLSearchParams(window.location.search);
 let filtres = { type: "", fournisseur: urlParams.get("fournisseur") || "", site: urlParams.get("site") || "", echeance: "", recherche: "" };
@@ -78,6 +78,7 @@ function render() {
           <option value="">Toutes</option>
           <option value="echu" ${filtres.echeance === "echu" ? "selected" : ""}>Échu</option>
           <option value="proche" ${filtres.echeance === "proche" ? "selected" : ""}>Proche (&le; 60 j)</option>
+          <option value="anticiper" ${filtres.echeance === "anticiper" ? "selected" : ""}>À anticiper (&le; 6 mois)</option>
           <option value="ok" ${filtres.echeance === "ok" ? "selected" : ""}>À jour</option>
           <option value="non_renseignee" ${filtres.echeance === "non_renseignee" ? "selected" : ""}>Non renseignée</option>
         </select>
@@ -110,12 +111,7 @@ function exportContrats() {
 
 function echeanceMatch(c, filtre) {
   if (!filtre) return true;
-  const info = dpEcheanceInfo(c.dateEcheance);
-  if (filtre === "non_renseignee") return info.days === null;
-  if (filtre === "echu") return info.days !== null && info.days < 0;
-  if (filtre === "proche") return info.days !== null && info.days >= 0 && info.days <= 60;
-  if (filtre === "ok") return info.days !== null && info.days > 60;
-  return true;
+  return dpEcheanceInfo(c.dateEcheance).tier === filtre;
 }
 
 function filteredContrats() {
