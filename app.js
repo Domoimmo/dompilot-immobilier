@@ -324,13 +324,14 @@ function dpAutoSync() {
    7) ÉCHÉANCES DE CONTRAT
    --------------------------------------------------------------------- */
 function dpEcheanceInfo(dateEcheance) {
-  if (!dateEcheance) return { label: "Non renseignée", cls: "badge-gray", days: null };
+  if (!dateEcheance) return { label: "Non renseignée", cls: "badge-gray", days: null, tier: "non_renseignee" };
   const d = new Date(dateEcheance);
-  if (isNaN(d)) return { label: "Non renseignée", cls: "badge-gray", days: null };
+  if (isNaN(d)) return { label: "Non renseignée", cls: "badge-gray", days: null, tier: "non_renseignee" };
   const days = Math.ceil((d - new Date(new Date().toDateString())) / 86400000);
-  if (days < 0) return { label: `Échu depuis ${dpFormatDate(dateEcheance)}`, cls: "badge-red", days };
-  if (days <= 60) return { label: `Dans ${days} j &middot; ${dpFormatDate(dateEcheance)}`, cls: "badge-orange", days };
-  return { label: dpFormatDate(dateEcheance), cls: "badge-green", days };
+  if (days < 0) return { label: `Échu depuis ${dpFormatDate(dateEcheance)}`, cls: "badge-red", days, tier: "echu" };
+  if (days <= 60) return { label: `Dans ${days} j &middot; ${dpFormatDate(dateEcheance)}`, cls: "badge-red", days, tier: "proche" };
+  if (days <= 180) return { label: `Dans ${days} j &middot; ${dpFormatDate(dateEcheance)}`, cls: "badge-orange", days, tier: "anticiper" };
+  return { label: dpFormatDate(dateEcheance), cls: "badge-green", days, tier: "ok" };
 }
 
 /* ---------------------------------------------------------------------
