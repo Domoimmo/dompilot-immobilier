@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 <script>
 const content = dpRenderShell("dashboard", "Tableau de bord", "Vue d'ensemble du patrimoine tertiaire et des contrats de fonctionnement");
 if (content) render();
@@ -35,12 +35,14 @@ function render() {
   const nbCategoriesPrestations = Object.keys(parCategoriePrestation).length;
 
   const echeances = contrats.map(c => ({ c, info: dpEcheanceInfo(c.dateEcheance) }));
-  const echus = echeances.filter(e => e.info.days !== null && e.info.days < 0);
-  const proches = echeances.filter(e => e.info.days !== null && e.info.days >= 0 && e.info.days <= 60);
-  const aSurveiller = echus.concat(proches).sort((a, b) => a.info.days - b.info.days).slice(0, 8);
+  const echus = echeances.filter(e => e.info.tier === "echu");
+  const proches = echeances.filter(e => e.info.tier === "proche");
+  const aAnticiper = echeances.filter(e => e.info.tier === "anticiper");
+  const urgent = echus.concat(proches);
+  const aSurveiller = urgent.concat(aAnticiper).sort((a, b) => a.info.days - b.info.days).slice(0, 12);
 
   content.innerHTML = `
-    <div class="grid-4 mb-14" style="margin-bottom:20px;">
+    <div class="grid-3 mb-14" style="margin-bottom:20px;">
       <div class="kpi-card">
         <div class="kpi-label">Sites &amp; agences suivis</div>
         <div class="kpi-value">${sites.length}</div>
@@ -57,15 +59,21 @@ function render() {
         <div class="kpi-sub">${dpFormatNumber(surfaceTotale && effectifTotal ? surfaceTotale / effectifTotal : 0, 1)} m&sup2; / poste en moyenne</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Échéances à surveiller</div>
-        <div class="kpi-value" style="color:${echus.length ? 'var(--rouge)' : 'var(--bleu-fonce)'};">${echus.length + proches.length}</div>
+        <div class="kpi-label">Échéances urgentes</div>
+        <div class="kpi-value" style="color:${urgent.length ? 'var(--rouge)' : 'var(--bleu-fonce)'};">${urgent.length}</div>
         <div class="kpi-sub">${echus.length} échu(s), ${proches.length} sous 60 jours</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Renouvellements à anticiper</div>
+        <div class="kpi-value" style="color:${aAnticiper.length ? 'var(--orange)' : 'var(--bleu-fonce)'};">${aAnticiper.length}</div>
+        <div class="kpi-sub">échéance dans 2 à 6 mois &mdash; lancer la relance / le marché</div>
       </div>
     </div>
 
     ${aSurveiller.length ? `
     <div class="card mb-14" style="margin-bottom:20px;">
-      <div class="card-title">Contrats à échéance proche ou dépassée</div>
+      <div class="card-title">Contrats à échéance proche, à anticiper ou dépassée</div>
+      <div class="text-muted mb-14">Au-delà de 60 jours et jusqu'à 6 mois : c'est le moment de vérifier et lancer la demande de renouvellement ou de nouveau marché.</div>
       <table class="data-table">
         <thead><tr><th>Contrat</th><th>Fournisseur</th><th>Échéance</th></tr></thead>
         <tbody>
