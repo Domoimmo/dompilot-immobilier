@@ -15,7 +15,7 @@
    (IRVE) restent disponibles au cas par cas — ex. remplacement d'une porte/fenêtre existante,
    installation d'une borne de recharge — sans faire partie du modèle type systématique. */
 const CORPS_METIER = [
-  "Étude / Diagnostic", "Suivi de chantier", "Dépose / Démolition intérieure", "Plâtrerie / Cloisons",
+  "Étude / Diagnostic", "Informatique / SI", "Suivi de chantier", "Dépose / Démolition intérieure", "Plâtrerie / Cloisons",
   "Menuiserie intérieure", "Menuiserie extérieure", "Plomberie", "Électricité",
   "Borne électrique (IRVE)", "CVC / Climatisation", "Peinture / Finitions", "Revêtements de sols",
   "Serrurerie / Métallerie", "Mobilier / Agencement", "Nettoyage fin de chantier", "Réception / Garantie", "Autre"
@@ -30,12 +30,14 @@ const AMGT_STATUT_BADGE = { "Planifié": "badge-gray", "En cours": "badge-blue",
    réserves → clôture), simplifiée : pas de foncier, permis de construire ni financement,
    qui ne concernent que la construction neuve (fichiers CONCEVOIR et Acheter des VEFA —
    entièrement hors périmètre, aucun élément retenu). La séquence de suivi de chantier et
-   de réception/clôture (étapes 4, 14, 16 à 21) reprend, y compris certaines tâches barrées
-   dans le fichier source, le déroulé du planning "Construire et Livrer" transmis à Cellance
-   pour WIP, débarrassé du vocabulaire VEFA/accession (notaire, ASL, syndic, prix de vente,
-   acquéreurs...). */
+   de réception/clôture reprend, y compris certaines tâches barrées dans le fichier source,
+   le déroulé du planning "Construire et Livrer" transmis à Cellance pour WIP, débarrassé du
+   vocabulaire VEFA/accession (notaire, ASL, syndic, prix de vente, acquéreurs...). Les deux
+   étapes SI (préconisation des branchements en amont, vérification du matériel par poste
+   après le mobilier) coordonnent le chantier avec les besoins informatiques des occupants. */
 const ETAPES_MODELE_INTERIEUR = [
   { libelle: "Diagnostic / état des lieux", corpsMetier: "Étude / Diagnostic" },
+  { libelle: "Réunion SI : préconisations des branchements", corpsMetier: "Informatique / SI" },
   { libelle: "Consultation entreprises (devis)", corpsMetier: "Étude / Diagnostic" },
   { libelle: "Validation des devis et commande", corpsMetier: "Étude / Diagnostic" },
   { libelle: "Réunion de lancement de chantier", corpsMetier: "Suivi de chantier" },
@@ -48,6 +50,7 @@ const ETAPES_MODELE_INTERIEUR = [
   { libelle: "Revêtements de sols", corpsMetier: "Revêtements de sols" },
   { libelle: "Peinture / finitions", corpsMetier: "Peinture / Finitions" },
   { libelle: "Mobilier / agencement", corpsMetier: "Mobilier / Agencement" },
+  { libelle: "S'assurer que le SI dispose du matériel nécessaire par poste", corpsMetier: "Informatique / SI" },
   { libelle: "Suivi de l'exécution et des factures", corpsMetier: "Suivi de chantier" },
   { libelle: "Nettoyage fin de chantier", corpsMetier: "Nettoyage fin de chantier" },
   { libelle: "Pré-réception (OPR) : visite de contrôle des travaux", corpsMetier: "Réception / Garantie" },
