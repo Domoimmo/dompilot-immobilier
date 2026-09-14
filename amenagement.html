@@ -16,7 +16,7 @@ const CORPS_METIER = [
   "Étude / Diagnostic", "Dépose / Démolition intérieure", "Plâtrerie / Cloisons",
   "Menuiserie intérieure", "Plomberie", "Électricité", "CVC / Climatisation",
   "Peinture / Finitions", "Revêtements de sols", "Serrurerie / Métallerie",
-  "Mobilier / Agencement", "Nettoyage fin de chantier", "Autre"
+  "Mobilier / Agencement", "Nettoyage fin de chantier", "Réception / Garantie", "Autre"
 ];
 const ETAPE_STATUTS = ["À venir", "En cours", "Terminé", "Retard"];
 const ETAPE_STATUT_COLOR = { "À venir": "#b7c0ca", "En cours": "#0f4c81", "Terminé": "#1f8a70", "Retard": "#c94f4f" };
@@ -26,7 +26,9 @@ const AMGT_STATUT_BADGE = { "Planifié": "badge-gray", "En cours": "badge-blue",
 /* Modèle type d'un chantier d'aménagement intérieur — méthodologie adaptée du chrono
    d'opération immobilière (phases études → consultation → travaux → réception → levée des
    réserves), simplifiée : pas de foncier, permis de construire ni financement, qui ne
-   concernent que la construction neuve. */
+   concernent que la construction neuve. La séquence de réception/livraison (étapes 14 à 18)
+   reprend le déroulé du planning "Construire et Livrer" transmis à Cellance pour WIP,
+   débarrassé du vocabulaire VEFA/accession (notaire, ASL, syndic, prix de revient...). */
 const ETAPES_MODELE_INTERIEUR = [
   { libelle: "Diagnostic / état des lieux", corpsMetier: "Étude / Diagnostic" },
   { libelle: "Consultation entreprises (devis)", corpsMetier: "Étude / Diagnostic" },
@@ -41,8 +43,11 @@ const ETAPES_MODELE_INTERIEUR = [
   { libelle: "Peinture / finitions", corpsMetier: "Peinture / Finitions" },
   { libelle: "Mobilier / agencement", corpsMetier: "Mobilier / Agencement" },
   { libelle: "Nettoyage fin de chantier", corpsMetier: "Nettoyage fin de chantier" },
-  { libelle: "Réception des travaux (PV + réserves)", corpsMetier: "Étude / Diagnostic" },
-  { libelle: "Levée des réserves", corpsMetier: "Étude / Diagnostic" }
+  { libelle: "Pré-réception : visite de contrôle des travaux", corpsMetier: "Réception / Garantie" },
+  { libelle: "PV de réception (avec ou sans réserves)", corpsMetier: "Réception / Garantie" },
+  { libelle: "Levée des réserves", corpsMetier: "Réception / Garantie" },
+  { libelle: "Remise des clés et du dossier technique (DOE/DIUO)", corpsMetier: "Réception / Garantie" },
+  { libelle: "Visite de garantie de parfait achèvement (à 1 an)", corpsMetier: "Réception / Garantie" }
 ];
 
 const ETAPE_FIELDS = [
