@@ -13,7 +13,7 @@
    couverture ni VRD : ce module ne gère pas de construction de locaux, uniquement des
    travaux d'aménagement dans des locaux existants. */
 const CORPS_METIER = [
-  "Étude / Diagnostic", "Dépose / Démolition intérieure", "Plâtrerie / Cloisons",
+  "Étude / Diagnostic", "Suivi de chantier", "Dépose / Démolition intérieure", "Plâtrerie / Cloisons",
   "Menuiserie intérieure", "Plomberie", "Électricité", "CVC / Climatisation",
   "Peinture / Finitions", "Revêtements de sols", "Serrurerie / Métallerie",
   "Mobilier / Agencement", "Nettoyage fin de chantier", "Réception / Garantie", "Autre"
@@ -25,14 +25,18 @@ const AMGT_STATUT_BADGE = { "Planifié": "badge-gray", "En cours": "badge-blue",
 
 /* Modèle type d'un chantier d'aménagement intérieur — méthodologie adaptée du chrono
    d'opération immobilière (phases études → consultation → travaux → réception → levée des
-   réserves), simplifiée : pas de foncier, permis de construire ni financement, qui ne
-   concernent que la construction neuve. La séquence de réception/livraison (étapes 14 à 18)
-   reprend le déroulé du planning "Construire et Livrer" transmis à Cellance pour WIP,
-   débarrassé du vocabulaire VEFA/accession (notaire, ASL, syndic, prix de revient...). */
+   réserves → clôture), simplifiée : pas de foncier, permis de construire ni financement,
+   qui ne concernent que la construction neuve (fichiers CONCEVOIR et Acheter des VEFA —
+   entièrement hors périmètre, aucun élément retenu). La séquence de suivi de chantier et
+   de réception/clôture (étapes 4, 14, 16 à 21) reprend, y compris certaines tâches barrées
+   dans le fichier source, le déroulé du planning "Construire et Livrer" transmis à Cellance
+   pour WIP, débarrassé du vocabulaire VEFA/accession (notaire, ASL, syndic, prix de vente,
+   acquéreurs...). */
 const ETAPES_MODELE_INTERIEUR = [
   { libelle: "Diagnostic / état des lieux", corpsMetier: "Étude / Diagnostic" },
   { libelle: "Consultation entreprises (devis)", corpsMetier: "Étude / Diagnostic" },
   { libelle: "Validation des devis et commande", corpsMetier: "Étude / Diagnostic" },
+  { libelle: "Réunion de lancement de chantier", corpsMetier: "Suivi de chantier" },
   { libelle: "Dépose / démolition intérieure", corpsMetier: "Dépose / Démolition intérieure" },
   { libelle: "Cloisons / plâtrerie", corpsMetier: "Plâtrerie / Cloisons" },
   { libelle: "Électricité", corpsMetier: "Électricité" },
@@ -42,11 +46,14 @@ const ETAPES_MODELE_INTERIEUR = [
   { libelle: "Revêtements de sols", corpsMetier: "Revêtements de sols" },
   { libelle: "Peinture / finitions", corpsMetier: "Peinture / Finitions" },
   { libelle: "Mobilier / agencement", corpsMetier: "Mobilier / Agencement" },
+  { libelle: "Suivi de l'exécution et des factures", corpsMetier: "Suivi de chantier" },
   { libelle: "Nettoyage fin de chantier", corpsMetier: "Nettoyage fin de chantier" },
-  { libelle: "Pré-réception : visite de contrôle des travaux", corpsMetier: "Réception / Garantie" },
+  { libelle: "Pré-réception (OPR) : visite de contrôle des travaux", corpsMetier: "Réception / Garantie" },
+  { libelle: "Suivi des réserves émises en pré-réception", corpsMetier: "Réception / Garantie" },
   { libelle: "PV de réception (avec ou sans réserves)", corpsMetier: "Réception / Garantie" },
   { libelle: "Levée des réserves", corpsMetier: "Réception / Garantie" },
   { libelle: "Remise des clés et du dossier technique (DOE/DIUO)", corpsMetier: "Réception / Garantie" },
+  { libelle: "Décompte général et définitif (DGD) et clôture administrative", corpsMetier: "Suivi de chantier" },
   { libelle: "Visite de garantie de parfait achèvement (à 1 an)", corpsMetier: "Réception / Garantie" }
 ];
 
