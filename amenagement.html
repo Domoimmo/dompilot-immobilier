@@ -9,16 +9,41 @@
 <body>
 <script src="app.js?v=16"></script>
 <script>
+/* Corps de métier recentrés sur l'aménagement intérieur — pas de gros œuvre, charpente,
+   couverture ni VRD : ce module ne gère pas de construction de locaux, uniquement des
+   travaux d'aménagement dans des locaux existants. */
 const CORPS_METIER = [
-  "Gros œuvre", "Charpente", "Couverture / Étanchéité", "Menuiserie extérieure",
+  "Étude / Diagnostic", "Dépose / Démolition intérieure", "Plâtrerie / Cloisons",
   "Menuiserie intérieure", "Plomberie", "Électricité", "CVC / Climatisation",
-  "Plâtrerie / Cloisons", "Peinture / Finitions", "Revêtements de sols",
-  "Serrurerie / Métallerie", "VRD / Aménagements extérieurs", "Nettoyage fin de chantier", "Autre"
+  "Peinture / Finitions", "Revêtements de sols", "Serrurerie / Métallerie",
+  "Mobilier / Agencement", "Nettoyage fin de chantier", "Autre"
 ];
 const ETAPE_STATUTS = ["À venir", "En cours", "Terminé", "Retard"];
 const ETAPE_STATUT_COLOR = { "À venir": "#b7c0ca", "En cours": "#0f4c81", "Terminé": "#1f8a70", "Retard": "#c94f4f" };
 const AMGT_STATUTS = ["Planifié", "En cours", "Terminé", "Suspendu"];
 const AMGT_STATUT_BADGE = { "Planifié": "badge-gray", "En cours": "badge-blue", "Terminé": "badge-green", "Suspendu": "badge-orange" };
+
+/* Modèle type d'un chantier d'aménagement intérieur — méthodologie adaptée du chrono
+   d'opération immobilière (phases études → consultation → travaux → réception → levée des
+   réserves), simplifiée : pas de foncier, permis de construire ni financement, qui ne
+   concernent que la construction neuve. */
+const ETAPES_MODELE_INTERIEUR = [
+  { libelle: "Diagnostic / état des lieux", corpsMetier: "Étude / Diagnostic" },
+  { libelle: "Consultation entreprises (devis)", corpsMetier: "Étude / Diagnostic" },
+  { libelle: "Validation des devis et commande", corpsMetier: "Étude / Diagnostic" },
+  { libelle: "Dépose / démolition intérieure", corpsMetier: "Dépose / Démolition intérieure" },
+  { libelle: "Cloisons / plâtrerie", corpsMetier: "Plâtrerie / Cloisons" },
+  { libelle: "Électricité", corpsMetier: "Électricité" },
+  { libelle: "Plomberie", corpsMetier: "Plomberie" },
+  { libelle: "CVC / climatisation", corpsMetier: "CVC / Climatisation" },
+  { libelle: "Menuiserie intérieure", corpsMetier: "Menuiserie intérieure" },
+  { libelle: "Revêtements de sols", corpsMetier: "Revêtements de sols" },
+  { libelle: "Peinture / finitions", corpsMetier: "Peinture / Finitions" },
+  { libelle: "Mobilier / agencement", corpsMetier: "Mobilier / Agencement" },
+  { libelle: "Nettoyage fin de chantier", corpsMetier: "Nettoyage fin de chantier" },
+  { libelle: "Réception des travaux (PV + réserves)", corpsMetier: "Étude / Diagnostic" },
+  { libelle: "Levée des réserves", corpsMetier: "Étude / Diagnostic" }
+];
 
 const ETAPE_FIELDS = [
   { key: "libelle", label: "Libellé de l'étape", type: "text", required: true },
@@ -268,7 +293,14 @@ function renderDetail(id) {
           <button class="btn btn-accent btn-sm" onclick="openEtapeForm(null)">+ Nouvelle étape</button>
         </div>
       </div>
-      ${etapes.length ? renderGantt(etapes, ganttScale) : `<div class="table-empty">Ajoutez des étapes pour voir apparaître le planning.</div>`}
+      ${!etapes.length ? `
+        <div class="table-empty" style="padding-top:0;">
+          Ajoutez des étapes pour voir apparaître le planning, ou partez d'un modèle type.
+          <div class="mt-18">
+            <button class="btn btn-outline btn-sm" onclick="applyModeleInterieur('${id}')">Utiliser le modèle type (aménagement intérieur)</button>
+          </div>
+        </div>
+      ` : renderGantt(etapes, ganttScale)}
     </div>
 
     <div class="table-wrap">
@@ -421,6 +453,42 @@ function deleteEtape(etapeId) {
   amgt.etapes = amgt.etapes.filter(e => e.id !== etapeId);
   dpAutoSync();
   closeDrawer();
+  render();
+}
+
+function applyModeleInterieur(id) {
+  if (!confirm(`Ajouter les ${ETAPES_MODELE_INTERIEUR.length} étapes types d'un aménagement intérieur ? Vous pourrez ensuite ajuster les dates et supprimer celles qui ne s'appliquent pas.`)) return;
+  const amgt = DP.amenagements.find(a => a.id === id);
+  if (!amgt.etapes) amgt.etapes = [];
+
+  // Répartit les étapes sur la période du chantier si elle est renseignée, sinon les laisse sans date.
+  let dates = null;
+  if (amgt.dateDebut && amgt.dateFin) {
+    const start = new Date(amgt.dateDebut);
+    const totalDays = Math.max(ETAPES_MODELE_INTERIEUR.length, (new Date(amgt.dateFin) - start) / 86400000);
+    const step = totalDays / ETAPES_MODELE_INTERIEUR.length;
+    dates = ETAPES_MODELE_INTERIEUR.map((_, i) => {
+      const d1 = new Date(start); d1.setDate(d1.getDate() + Math.round(i * step));
+      const d2 = new Date(start); d2.setDate(d2.getDate() + Math.round((i + 1) * step) - 1);
+      return { debut: d1.toISOString().slice(0, 10), fin: d2.toISOString().slice(0, 10) };
+    });
+  }
+
+  ETAPES_MODELE_INTERIEUR.forEach((mod, i) => {
+    amgt.etapes.push({
+      id: dpGenId("etp"),
+      libelle: mod.libelle,
+      corpsMetier: mod.corpsMetier,
+      dateDebut: dates ? dates[i].debut : "",
+      dateFin: dates ? dates[i].fin : "",
+      statut: "À venir",
+      avancement: 0,
+      prestataire: "",
+      commentaire: ""
+    });
+  });
+
+  dpAutoSync();
   render();
 }
 </script>
