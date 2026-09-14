@@ -11,12 +11,14 @@
 <script>
 /* Corps de métier recentrés sur l'aménagement intérieur — pas de gros œuvre, charpente,
    couverture ni VRD : ce module ne gère pas de construction de locaux, uniquement des
-   travaux d'aménagement dans des locaux existants. */
+   travaux d'aménagement dans des locaux existants. Menuiserie extérieure et Borne électrique
+   (IRVE) restent disponibles au cas par cas — ex. remplacement d'une porte/fenêtre existante,
+   installation d'une borne de recharge — sans faire partie du modèle type systématique. */
 const CORPS_METIER = [
   "Étude / Diagnostic", "Suivi de chantier", "Dépose / Démolition intérieure", "Plâtrerie / Cloisons",
-  "Menuiserie intérieure", "Plomberie", "Électricité", "CVC / Climatisation",
-  "Peinture / Finitions", "Revêtements de sols", "Serrurerie / Métallerie",
-  "Mobilier / Agencement", "Nettoyage fin de chantier", "Réception / Garantie", "Autre"
+  "Menuiserie intérieure", "Menuiserie extérieure", "Plomberie", "Électricité",
+  "Borne électrique (IRVE)", "CVC / Climatisation", "Peinture / Finitions", "Revêtements de sols",
+  "Serrurerie / Métallerie", "Mobilier / Agencement", "Nettoyage fin de chantier", "Réception / Garantie", "Autre"
 ];
 const ETAPE_STATUTS = ["À venir", "En cours", "Terminé", "Retard"];
 const ETAPE_STATUT_COLOR = { "À venir": "#b7c0ca", "En cours": "#0f4c81", "Terminé": "#1f8a70", "Retard": "#c94f4f" };
