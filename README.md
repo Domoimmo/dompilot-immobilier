@@ -45,6 +45,13 @@ Le dépôt privé (`Domoimmo/dompilot-immobilier-data`) est **fixé dans le code
 ressaisir owner/repo/chemin. Il suffit de coller un **Personal Access Token** une fois par appareil
 dans Paramètres ; l'app s'y connecte ensuite automatiquement à chaque visite (comme GESTOCK).
 
+Comme GESTOCK, les données sont réparties en **un fichier JSON par module** (`sites.json`,
+`contrats.json`, `annuaire.json`, `amenagements.json`, `utilisateurs.json`) plutôt qu'un unique
+fichier — ça limite la taille de chaque lecture/écriture et cantonne les conflits d'édition
+concurrente à un seul module. Chaque page ne synchronise que le(s) module(s) qu'elle modifie
+(ex. éditer un contrat n'écrit que `contrats.json`), avec une fusion défensive par id avant
+chaque écriture pour ne jamais perdre une donnée enregistrée entre-temps par un autre appareil.
+
 ## Pages
 
 - `index.html` — connexion (identifiant + mot de passe, écran de première connexion)
