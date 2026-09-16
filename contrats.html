@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 <script>
 const urlParams = new URLSearchParams(window.location.search);
 let filtres = { type: "", fournisseur: urlParams.get("fournisseur") || "", site: urlParams.get("site") || "", echeance: "", recherche: "" };
@@ -271,7 +271,7 @@ function saveContrat(id) {
   } else {
     DP.contrats.push({ id: dpGenId("ctr"), prestationsMensuelles: {}, passageAnnuel: "", ...values });
   }
-  dpAutoSync();
+  dpAutoSync(["contrats"]);
   closeDrawer();
   render();
 }
@@ -279,7 +279,7 @@ function saveContrat(id) {
 function deleteContrat(id) {
   if (!confirm("Supprimer définitivement ce contrat ?")) return;
   DP.contrats = DP.contrats.filter(x => x.id !== id);
-  dpAutoSync();
+  dpAutoSync(["contrats"]);
   closeDrawer();
   render();
 }
