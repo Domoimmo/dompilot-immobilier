@@ -75,7 +75,7 @@ async function dpSetPassword(identifiant, newPassword, autoLogin) {
   const salt = dpRandomSalt();
   u.passwordSalt = salt;
   u.passwordHash = await dpHashPassword(newPassword, salt);
-  dpAutoSync();
+  await dpAutoSync();
   if (autoLogin) sessionStorage.setItem(DP_SESSION_KEY, JSON.stringify({ identifiant: u.identifiant, nom: u.nom }));
   return true;
 }
@@ -315,9 +315,9 @@ function dpValidateRequired(fields, values) {
 
 /* Synchronisation automatique en arrière-plan après une modification,
    si un dépôt GitHub est configuré (sinon les données restent locales). */
-function dpAutoSync() {
+async function dpAutoSync() {
   dpPersist();
-  if (dpGetGithubConfig()) dpSyncWithGitHub();
+  if (dpGetGithubConfig()) await dpSyncWithGitHub();
 }
 
 /* ---------------------------------------------------------------------
