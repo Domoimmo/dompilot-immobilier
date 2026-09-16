@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 <script>
 /* Corps de métier recentrés sur l'aménagement intérieur — pas de gros œuvre, charpente,
    couverture ni VRD : ce module ne gère pas de construction de locaux, uniquement des
@@ -236,11 +236,11 @@ async function saveAmgt(id) {
   } else {
     const newId = dpGenId("amgt");
     DP.amenagements.push({ id: newId, etapes: [], ...values });
-    await dpAutoSync();
+    await dpAutoSync(["amenagements"]);
     window.location.href = `amenagement.html?id=${encodeURIComponent(newId)}`;
     return;
   }
-  await dpAutoSync();
+  await dpAutoSync(["amenagements"]);
   closeDrawer();
   render();
 }
@@ -248,7 +248,7 @@ async function saveAmgt(id) {
 async function deleteAmgt(id) {
   if (!confirm("Supprimer définitivement ce chantier et toutes ses étapes ?")) return;
   DP.amenagements = DP.amenagements.filter(x => x.id !== id);
-  await dpAutoSync();
+  await dpAutoSync(["amenagements"]);
   window.location.href = "amenagement.html";
 }
 
@@ -459,7 +459,7 @@ function saveEtape(etapeId) {
   } else {
     amgt.etapes.push({ id: dpGenId("etp"), ...values });
   }
-  dpAutoSync();
+  dpAutoSync(["amenagements"]);
   closeDrawer();
   render();
 }
@@ -468,7 +468,7 @@ function deleteEtape(etapeId) {
   if (!confirm("Supprimer définitivement cette étape ?")) return;
   const amgt = DP.amenagements.find(a => a.id === currentAmenagementId);
   amgt.etapes = amgt.etapes.filter(e => e.id !== etapeId);
-  dpAutoSync();
+  dpAutoSync(["amenagements"]);
   closeDrawer();
   render();
 }
@@ -505,7 +505,7 @@ function applyModeleInterieur(id) {
     });
   });
 
-  dpAutoSync();
+  dpAutoSync(["amenagements"]);
   render();
 }
 </script>
