@@ -16,12 +16,19 @@ const DP_SEED = {"sites": [{"id": "site-001", "categorie": "Agence", "nom": "Age
    --------------------------------------------------------------------- */
 let DP = dpLoad();
 
+function dpEnsureShape(d) {
+  ["sites", "contrats", "annuaire", "amenagements", "utilisateurs", "budgets"].forEach(k => {
+    if (!Array.isArray(d[k])) d[k] = [];
+  });
+  return d;
+}
+
 function dpLoad() {
   try {
     const raw = localStorage.getItem(DP_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) return dpEnsureShape(JSON.parse(raw));
   } catch (e) { /* ignore, on retombe sur le seed */ }
-  const fresh = JSON.parse(JSON.stringify(DP_SEED));
+  const fresh = dpEnsureShape(JSON.parse(JSON.stringify(DP_SEED)));
   localStorage.setItem(DP_STORAGE_KEY, JSON.stringify(fresh));
   return fresh;
 }
@@ -115,7 +122,8 @@ const DP_GITHUB_FILES = {
   contrats: "contrats.json",
   annuaire: "annuaire.json",
   amenagements: "amenagements.json",
-  utilisateurs: "utilisateurs.json"
+  utilisateurs: "utilisateurs.json",
+  budgets: "budgets.json"
 };
 const DP_ALL_KEYS = Object.keys(DP_GITHUB_FILES);
 
@@ -164,7 +172,7 @@ function dpMergeArrayById(localArr, remoteArr, idKey) {
   });
 }
 
-const DP_ID_KEY = { sites: "id", contrats: "id", annuaire: "id", amenagements: "id", utilisateurs: "identifiant" };
+const DP_ID_KEY = { sites: "id", contrats: "id", annuaire: "id", amenagements: "id", utilisateurs: "identifiant", budgets: "id" };
 
 /* Synchronise un ou plusieurs modules (ex. ["contrats"], ["sites","contrats"] quand une
    suppression de site détache aussi des contrats). Sans argument, synchronise tout —
@@ -251,6 +259,7 @@ const DP_NAV = [
   { key: "patrimoine",  href: "patrimoine.html",  ico: "&#127970;", label: "Patrimoine" },
   { key: "carte",       href: "carte.html",       ico: "&#128506;", label: "Carte" },
   { key: "amenagement", href: "amenagement.html", ico: "&#128736;", label: "Aménagement" },
+  { key: "budget",      href: "budget.html",      ico: "&#128176;", label: "Budget" },
   { key: "contrats",    href: "contrats.html",    ico: "&#128196;", label: "Contrats" },
   { key: "annuaire",    href: "annuaire.html",    ico: "&#9742;",  label: "Annuaire prestataires" },
   { key: "parametres",  href: "parametres.html",  ico: "&#9881;",  label: "Paramètres" }
