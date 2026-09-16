@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=20"></script>
+<script src="app.js?v=21"></script>
 <script>
 let filtres = { categorie: "", departement: "", recherche: "" };
 
@@ -148,6 +148,28 @@ function openSiteForm(id) {
             </div>
           `).join("") : `<div class="text-muted">Aucun contrat rattaché à ce site pour le moment.</div>`}
           ${contratsLies.length ? `<a href="contrats.html?site=${encodeURIComponent(id)}" class="btn btn-outline btn-sm mt-18">Voir dans Contrats &rarr;</a>` : ""}
+        </div>
+        <div class="drawer-section mt-18">
+          <h3>Plans du bâtiment (${(site.plans || []).length})</h3>
+          ${(site.plans || []).length ? site.plans.map(p => `
+            <div class="kv-row">
+              <span class="k">${dpEsc(p.nom)}${p.etage ? " — " + dpEsc(p.etage) : ""}<br><span class="text-muted">${dpFormatBytes(p.taille)} &middot; ajouté le ${dpFormatDate(p.dateAjout)}</span></span>
+              <span class="v">
+                <button type="button" class="btn btn-outline btn-sm" onclick="viewPlan('${id}','${p.id}')">Voir</button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="deletePlan('${id}','${p.id}')" style="color:var(--rouge);border-color:var(--rouge-clair);">Suppr.</button>
+              </span>
+            </div>
+          `).join("") : `<div class="text-muted mb-14">Aucun plan ajouté.</div>`}
+          <div class="field mt-18">
+            <label>Étage / niveau (optionnel)</label>
+            <input id="plan-etage-input" placeholder="ex. RDC, Étage 1, Sous-sol...">
+          </div>
+          <div class="field">
+            <label>Fichier (image ou PDF, jusqu'à ~25 Mo)</label>
+            <input id="plan-file-input" type="file" accept="image/*,application/pdf">
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" onclick="addPlan('${id}')">Ajouter le plan</button>
+          <div id="plan-upload-status" class="text-muted mt-18"></div>
         </div>` : ""}
       </div>
     </div>
@@ -190,6 +212,63 @@ function deleteSite(id) {
 }
 
 function closeDrawer() { document.getElementById("drawer-holder").innerHTML = ""; }
+
+async function addPlan(siteId) {
+  const fileInput = document.getElementById("plan-file-input");
+  const etageInput = document.getElementById("plan-etage-input");
+  const statusEl = document.getElementById("plan-upload-status");
+  const file = fileInput.files[0];
+  if (!file) { alert("Choisissez d'abord un fichier."); return; }
+  if (file.size > 25 * 1024 * 1024) { alert("Fichier trop volumineux (limite 25 Mo)."); return; }
+  if (!dpGetGithubConfig()) { alert("Configurez d'abord le token GitHub dans Paramètres pour pouvoir stocker des plans."); return; }
+
+  const site = DP.sites.find(s => s.id === siteId);
+  const planId = dpGenId("plan");
+  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+  const path = `plans/${siteId}/${planId}-${safeName}`;
+
+  statusEl.textContent = "Envoi en cours…";
+  const result = await dpUploadLargeFile(path, file, msg => { statusEl.textContent = msg; });
+  if (!result.ok) { statusEl.textContent = "Échec de l'envoi : " + result.error; return; }
+
+  if (!site.plans) site.plans = [];
+  site.plans.push({
+    id: planId, nom: file.name, etage: etageInput.value.trim(),
+    cheminGitHub: path, sha: result.sha, type: file.type || "application/octet-stream",
+    taille: file.size, dateAjout: new Date().toISOString().slice(0, 10)
+  });
+  await dpAutoSync(["sites"]);
+  openSiteForm(siteId);
+}
+
+async function viewPlan(siteId, planId) {
+  const site = DP.sites.find(s => s.id === siteId);
+  const plan = site.plans.find(p => p.id === planId);
+  if (!plan) return;
+  const w = window.open("", "_blank");
+  w.document.write("Chargement du plan…");
+  const dataUrl = await dpFetchBlobDataUrl(plan.sha, plan.type);
+  if (!dataUrl) { w.document.body.textContent = "Impossible de charger le plan."; return; }
+  w.document.open();
+  if (plan.type.startsWith("image/")) {
+    w.document.write(`<title>${plan.nom}</title><body style="margin:0;background:#222;"><img src="${dataUrl}" style="max-width:100%;display:block;margin:auto;"></body>`);
+  } else {
+    w.document.write(`<title>${plan.nom}</title><body style="margin:0;"><iframe src="${dataUrl}" style="border:none;width:100%;height:100vh;"></iframe></body>`);
+  }
+  w.document.close();
+}
+
+async function deletePlan(siteId, planId) {
+  if (!confirm("Supprimer définitivement ce plan ?")) return;
+  const site = DP.sites.find(s => s.id === siteId);
+  const plan = site.plans.find(p => p.id === planId);
+  if (!plan) return;
+  const ok = await dpDeleteLargeFile(plan.cheminGitHub);
+  if (!ok) { alert("Échec de la suppression sur GitHub."); return; }
+  site.plans = site.plans.filter(p => p.id !== planId);
+  await dpAutoSync(["sites"]);
+  openSiteForm(siteId);
+}
 </script>
 </body>
 </html>
