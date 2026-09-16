@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 <script>
 let filtres = { secteur: "", categorie: "", recherche: "" };
 
@@ -161,7 +161,7 @@ function saveContact(id) {
   } else {
     DP.annuaire.push({ id: dpGenId("ann"), ...values });
   }
-  dpAutoSync();
+  dpAutoSync(["annuaire"]);
   closeDrawer();
   render();
 }
@@ -174,7 +174,7 @@ function deleteContact(id) {
   if (!confirm(msg)) return;
   DP.contrats.forEach(c => { if (c.contactId === id) c.contactId = ""; });
   DP.annuaire = DP.annuaire.filter(x => x.id !== id);
-  dpAutoSync();
+  dpAutoSync(["annuaire", "contrats"]);
   closeDrawer();
   render();
 }
