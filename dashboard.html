@@ -68,6 +68,14 @@ function render() {
         <div class="kpi-value" style="color:${aAnticiper.length ? 'var(--orange)' : 'var(--bleu-fonce)'};">${aAnticiper.length}</div>
         <div class="kpi-sub">échéance dans 2 à 6 mois &mdash; lancer la relance / le marché</div>
       </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Bibliothèque de plans</div>
+        <select id="plan-site-select" style="margin-top:10px;width:100%;padding:7px 8px;border:1px solid var(--gris-bordure);border-radius:6px;font-size:12.5px;background:#fff;color:var(--gris-texte);">
+          <option value="">Choisir un site&hellip;</option>
+          ${sites.slice().sort((a, b) => a.nom.localeCompare(b.nom, "fr")).map(s => `<option value="${dpEsc(s.id)}">${dpEsc(s.nom)}${(s.plans || []).length ? ` (${s.plans.length})` : ""}</option>`).join("")}
+        </select>
+        <div id="plan-list-holder" class="mt-18"></div>
+      </div>
     </div>
 
     ${aSurveiller.length ? `
@@ -135,6 +143,42 @@ function render() {
       </div>
     </div>
   `;
+
+  document.getElementById("plan-site-select").addEventListener("change", e => renderPlanList(e.target.value));
+}
+
+function renderPlanList(siteId) {
+  const holder = document.getElementById("plan-list-holder");
+  if (!siteId) { holder.innerHTML = ""; return; }
+  const site = DP.sites.find(s => s.id === siteId);
+  const plans = (site && site.plans) || [];
+  if (!plans.length) {
+    holder.innerHTML = `<div class="text-muted">Aucun plan disponible pour ce site. <a href="patrimoine.html">En ajouter &rarr;</a></div>`;
+    return;
+  }
+  holder.innerHTML = plans.map(p => `
+    <div class="kv-row" style="cursor:pointer;" onclick="viewPlan('${site.id}','${p.id}')">
+      <span class="k">${dpEsc(p.nom)}${p.etage ? " — " + dpEsc(p.etage) : ""}</span>
+      <span class="v">Voir &rarr;</span>
+    </div>
+  `).join("");
+}
+
+async function viewPlan(siteId, planId) {
+  const site = DP.sites.find(s => s.id === siteId);
+  const plan = site.plans.find(p => p.id === planId);
+  if (!plan) return;
+  const w = window.open("", "_blank");
+  w.document.write("Chargement du plan…");
+  const dataUrl = await dpFetchBlobDataUrl(plan.sha, plan.type);
+  if (!dataUrl) { w.document.body.textContent = "Impossible de charger le plan."; return; }
+  w.document.open();
+  if (plan.type.startsWith("image/")) {
+    w.document.write(`<title>${plan.nom}</title><body style="margin:0;background:#222;"><img src="${dataUrl}" style="max-width:100%;display:block;margin:auto;"></body>`);
+  } else {
+    w.document.write(`<title>${plan.nom}</title><body style="margin:0;"><iframe src="${dataUrl}" style="border:none;width:100%;height:100vh;"></iframe></body>`);
+  }
+  w.document.close();
 }
 </script>
 </body>
