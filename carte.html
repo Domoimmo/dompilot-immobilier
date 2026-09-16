@@ -88,15 +88,18 @@ async function geocodeAndRenderMarkers() {
       statusEl.textContent = `Géocodage des adresses en cours… (${index}/${aGeocoder.length})`;
       const coords = await dpGeocode(s.adresse);
       if (coords) {
-        s.lat = coords.lat; s.lon = coords.lon;
-        addMarker(s);
-        bounds.push([s.lat, s.lon]);
+        // Écrit dans l'entrée courante de DP.sites (retrouvée par id) plutôt que de muter la
+        // référence capturée au départ : si un rechargement en arrière-plan a entre-temps
+        // réassigné DP (ex. dpLoadFromGitHub), ça évite de perdre les coordonnées trouvées.
+        const current = DP.sites.find(x => x.id === s.id) || s;
+        current.lat = coords.lat; current.lon = coords.lon;
+        addMarker(current);
+        bounds.push([current.lat, current.lon]);
         if (bounds.length) map.fitBounds(bounds, { padding: [30, 30] });
       }
       await dpSleep(1200); // respecte la politique d'usage Nominatim (~1 req/s)
     }
-    dpPersist();
-    if (dpGetGithubConfig()) dpSyncWithGitHub();
+    await dpAutoSync();
     const localises = DP.sites.filter(s => s.lat && s.lon).length;
     statusEl.textContent = `${localises} site(s) localisé(s) sur ${sites.length}.`;
   } finally {
