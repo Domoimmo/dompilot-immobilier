@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 <script>
 /* Corps de métier recentrés sur l'aménagement intérieur — pas de gros œuvre, charpente,
    couverture ni VRD : ce module ne gère pas de construction de locaux, uniquement des
@@ -224,7 +224,7 @@ function openAmgtForm(id) {
   `;
 }
 
-function saveAmgt(id) {
+async function saveAmgt(id) {
   const fields = getAmgtFields();
   const values = dpReadFormFields(fields);
   const missing = dpValidateRequired(fields, values);
@@ -236,19 +236,19 @@ function saveAmgt(id) {
   } else {
     const newId = dpGenId("amgt");
     DP.amenagements.push({ id: newId, etapes: [], ...values });
-    dpAutoSync();
+    await dpAutoSync();
     window.location.href = `amenagement.html?id=${encodeURIComponent(newId)}`;
     return;
   }
-  dpAutoSync();
+  await dpAutoSync();
   closeDrawer();
   render();
 }
 
-function deleteAmgt(id) {
+async function deleteAmgt(id) {
   if (!confirm("Supprimer définitivement ce chantier et toutes ses étapes ?")) return;
   DP.amenagements = DP.amenagements.filter(x => x.id !== id);
-  dpAutoSync();
+  await dpAutoSync();
   window.location.href = "amenagement.html";
 }
 
