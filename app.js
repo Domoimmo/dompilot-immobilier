@@ -131,7 +131,31 @@ async function dpSyncWithGitHub() {
     const apiUrl = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`;
     let sha = null;
     const getResp = await fetch(apiUrl, { headers: { Authorization: `token ${cfg.token}` } });
-    if (getResp.ok) { const j = await getResp.json(); sha = j.sha; }
+    if (getResp.ok) {
+      const j = await getResp.json();
+      sha = j.sha;
+      // Fusion défensive : n'écrase jamais un mot de passe déjà enregistré à distance avec
+      // une copie locale qui ne l'a pas encore (ex. un autre onglet resté ouvert sur une
+      // version plus ancienne). Sans ça, la dernière écriture peut effacer un mot de passe
+      // qu'un autre onglet/appareil vient tout juste de définir.
+      try {
+        const remote = JSON.parse(decodeURIComponent(escape(atob(j.content))));
+        if (remote && Array.isArray(remote.utilisateurs) && Array.isArray(DP.utilisateurs)) {
+          let merged = false;
+          DP.utilisateurs.forEach(u => {
+            if (!u.passwordHash) {
+              const ru = remote.utilisateurs.find(x => x.identifiant === u.identifiant);
+              if (ru && ru.passwordHash) {
+                u.passwordHash = ru.passwordHash;
+                u.passwordSalt = ru.passwordSalt;
+                merged = true;
+              }
+            }
+          });
+          if (merged) dpPersist();
+        }
+      } catch (mergeErr) { console.error("Fusion mot de passe échouée", mergeErr); }
+    }
     const content = btoa(unescape(encodeURIComponent(JSON.stringify(DP, null, 2))));
     const putResp = await fetch(apiUrl, {
       method: "PUT",
