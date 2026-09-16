@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 <script>
 const NEW_USER_FIELDS = [
   { key: "identifiant", label: "Identifiant", type: "text", required: true },
@@ -29,8 +29,10 @@ function render() {
         <div class="card-title">Connexion à la base de données</div>
         <div class="text-muted mb-14">
           Le dépôt de données est fixe (<code>${dpEsc(DP_GITHUB_REPO.owner)}/${dpEsc(DP_GITHUB_REPO.repo)}</code>) —
-          rien à configurer côté serveur. Il suffit de coller ci-dessous un token GitHub personnel
-          <b>une seule fois par appareil</b> ; l'app se connecte ensuite automatiquement à chaque visite.
+          rien à configurer côté serveur. Un fichier JSON séparé par module (sites, contrats, annuaire,
+          aménagements, utilisateurs) limite la taille de chaque lecture/écriture. Il suffit de coller
+          ci-dessous un token GitHub personnel <b>une seule fois par appareil</b> ; l'app se connecte
+          ensuite automatiquement à chaque visite.
         </div>
         <div class="login-error show" style="background:#fbeadb;color:var(--orange);">
           &#9888; Utilisez un token <b>fine-grained</b>, limité au dépôt <code>${dpEsc(DP_GITHUB_REPO.repo)}</code>
@@ -147,7 +149,7 @@ function addUser() {
     passwordHash: null,
     passwordSalt: null
   });
-  dpAutoSync();
+  dpAutoSync(["utilisateurs"]);
   render();
 }
 
@@ -155,14 +157,14 @@ function resetUserPassword(identifiant) {
   if (!confirm(`Réinitialiser le mot de passe de ${identifiant} ? Il devra en choisir un nouveau à sa prochaine connexion.`)) return;
   const u = DP.utilisateurs.find(x => x.identifiant === identifiant);
   if (u) { u.passwordHash = null; u.passwordSalt = null; }
-  dpAutoSync();
+  dpAutoSync(["utilisateurs"]);
   render();
 }
 
 function deleteUser(identifiant) {
   if (!confirm(`Supprimer définitivement le compte ${identifiant} ?`)) return;
   DP.utilisateurs = DP.utilisateurs.filter(x => x.identifiant !== identifiant);
-  dpAutoSync();
+  dpAutoSync(["utilisateurs"]);
   render();
 }
 </script>
