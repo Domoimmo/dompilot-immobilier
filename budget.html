@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Budget — DomPatrimoine</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="app.js?v=22"></script>
+<script>
+const CURRENT_YEAR = new Date().getFullYear();
+let selectedYear = CURRENT_YEAR;
+const AMGT_STATUT_BADGE = { "Planifié": "badge-gray", "En cours": "badge-blue", "Terminé": "badge-green", "Suspendu": "badge-orange" };
+
+const content = dpRenderShell("budget", "Budget", "Suivi du budget annuel et des projets/contrats qui s'y rattachent");
+if (content) render();
+
+function getBudgetFields() {
+  return [
+    { key: "annee", label: "Année", type: "number", required: true },
+    { key: "montantAlloue", label: "Budget alloué (€)", type: "number", required: true },
+    { key: "commentaire", label: "Commentaire", type: "textarea" }
+  ];
+}
+
+function availableYears() {
+  const years = new Set();
+  for (let y = CURRENT_YEAR - 1; y <= CURRENT_YEAR + 2; y++) years.add(y);
+  DP.budgets.forEach(b => years.add(b.annee));
+  DP.amenagements.forEach(a => { if (a.dateDebut) years.add(new Date(a.dateDebut).getFullYear()); });
+  return Array.from(years).sort((a, b) => a - b);
+}
+
+function amgtsForYear(annee) {
+  return DP.amenagements.filter(a => a.dateDebut && new Date(a.dateDebut).getFullYear() === annee);
+}
+
+/* Un contrat est considéré actif sur l'année si sa signature est antérieure ou pendant
+   cette année, et que son échéance (si renseignée) n'est pas déjà passée avant cette année. */
+function contratsActifsPourAnnee(annee) {
+  return DP.contrats.filter(c => {
+    if (!c.montantAnnuel) return false;
+    const debutOk = !c.dateSignature || new Date(c.dateSignature).getFullYear() <= annee;
+    const finOk = !c.dateEcheance || new Date(c.dateEcheance).getFullYear() >= annee;
+    return debutOk && finOk;
+  });
+}
+
+function render() {
+  const years = availableYears();
+  const budget = DP.budgets.find(b => b.annee === selectedYear);
+  const montantAlloue = budget ? (budget.montantAlloue || 0) : 0;
+
+  const amgts = amgtsForYear(selectedYear);
+  const engageProjets = amgts.reduce((s, a) => s + (Number(a.budget) || 0), 0);
+
+  const contratsActifs = contratsActifsPourAnnee(selectedYear);
+  const engageContrats = contratsActifs.reduce((s, c) => s + (Number(c.montantAnnuel) || 0), 0);
+
+  const totalEngage = engageProjets + engageContrats;
+  const reste = montantAlloue - totalEngage;
+  const pctUtilise = montantAlloue ? Math.round((totalEngage / montantAlloue) * 100) : 0;
+  const pctColor = pctUtilise > 100 ? "var(--rouge)" : (pctUtilise >= 80 ? "var(--orange)" : "var(--accent)");
+
+  content.innerHTML = `
+    <div class="filter-bar">
+      <div class="field">
+        <label>Année</label>
+        <select id="f-annee">
+          ${years.map(y => `<option value="${y}" ${y === selectedYear ? "selected" : ""}>${y}</option>`).join("")}
+        </select>
+      </div>
+      <div class="filter-count" id="f-count"></div>
+      <button class="btn btn-outline btn-sm" onclick="exportBudget()">&#8615; Exporter (Excel)</button>
+      <button class="btn btn-accent btn-sm" onclick="openBudgetForm()">${budget ? "Modifier le budget alloué" : "+ Définir le budget " + selectedYear}</button>
+    </div>
+
+    <div class="grid-4 mb-14" style="margin-bottom:20px;">
+      <div class="kpi-card">
+        <div class="kpi-label">Budget alloué ${selectedYear}</div>
+        <div class="kpi-value">${montantAlloue ? dpFormatNumber(montantAlloue, 0) + " €" : "&mdash;"}</div>
+        <div class="kpi-sub">${budget && budget.commentaire ? dpEsc(budget.commentaire) : "Non défini"}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Engagé — projets d'aménagement</div>
+        <div class="kpi-value">${dpFormatNumber(engageProjets, 0)} €</div>
+        <div class="kpi-sub">${amgts.length} chantier(s) démarré(s) en ${selectedYear}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Engagé — contrats de fonctionnement</div>
+        <div class="kpi-value">${dpFormatNumber(engageContrats, 0)} €</div>
+        <div class="kpi-sub">${contratsActifs.length} contrat(s) actif(s) avec coût annuel renseigné</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Reste disponible</div>
+        <div class="kpi-value" style="color:${reste < 0 ? 'var(--rouge)' : 'var(--bleu-fonce)'};">${dpFormatNumber(reste, 0)} €</div>
+        <div class="kpi-sub">${montantAlloue ? pctUtilise + "% du budget utilisé" : "Définissez le budget pour calculer"}</div>
+      </div>
+    </div>
+
+    ${montantAlloue ? `
+    <div class="card mb-14" style="margin-bottom:20px;">
+      <div class="card-title">Utilisation du budget ${selectedYear}</div>
+      <div class="progress-track" style="height:14px;">
+        <div class="progress-fill" style="width:${Math.min(100, pctUtilise)}%;background:${pctColor};"></div>
+      </div>
+      <div class="text-muted mt-18">${dpFormatNumber(totalEngage, 0)} € engagés sur ${dpFormatNumber(montantAlloue, 0)} € alloués (${pctUtilise}%)${pctUtilise > 100 ? " — budget dépassé" : ""}</div>
+    </div>` : ""}
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Projets d'aménagement — ${selectedYear}</div>
+        ${amgts.length ? `
+        <table class="data-table">
+          <thead><tr><th>Chantier</th><th>Statut</th><th>Budget</th></tr></thead>
+          <tbody>
+            ${amgts.map(a => `
+              <tr onclick="window.location.href='amenagement.html?id=${encodeURIComponent(a.id)}'">
+                <td>${dpEsc(a.nom)}</td>
+                <td><span class="badge ${AMGT_STATUT_BADGE[a.statut] || 'badge-gray'}">${dpEsc(a.statut || "&mdash;")}</span></td>
+                <td>${a.budget ? dpFormatNumber(a.budget, 0) + " €" : "&mdash;"}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>` : `<div class="table-empty">Aucun chantier démarré en ${selectedYear}.</div>`}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Contrats avec coût annuel — ${selectedYear}</div>
+        ${contratsActifs.length ? `
+        <table class="data-table">
+          <thead><tr><th>Contrat</th><th>Fournisseur</th><th>Coût annuel</th></tr></thead>
+          <tbody>
+            ${contratsActifs.slice().sort((a, b) => (b.montantAnnuel || 0) - (a.montantAnnuel || 0)).map(c => `
+              <tr onclick="window.location.href='contrats.html'">
+                <td>${dpEsc(c.libelle)}</td>
+                <td>${dpEsc(c.fournisseur)}</td>
+                <td>${dpFormatNumber(c.montantAnnuel, 0)} €</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>` : `<div class="table-empty">Aucun contrat avec coût annuel renseigné pour ${selectedYear}.<br><span class="text-muted">Renseignez le champ "Coût annuel" sur les fiches contrat pour les voir apparaître ici.</span></div>`}
+      </div>
+    </div>
+
+    <div id="drawer-holder"></div>
+  `;
+
+  document.getElementById("f-annee").addEventListener("change", e => { selectedYear = Number(e.target.value); render(); });
+}
+
+function openBudgetForm() {
+  const existing = DP.budgets.find(b => b.annee === selectedYear);
+  const values = existing || { annee: selectedYear, montantAlloue: null, commentaire: "" };
+  document.getElementById("drawer-holder").innerHTML = `
+    <div class="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
+      <div class="drawer">
+        <div class="drawer-header">
+          <h2 style="font-size:17px;">Budget ${selectedYear}</h2>
+          <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+        </div>
+        <div>${dpRenderFormFields(getBudgetFields(), values)}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-primary btn-sm" onclick="saveBudget()">Enregistrer</button>
+          <button class="btn btn-outline btn-sm" onclick="closeDrawer()">Annuler</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function saveBudget() {
+  const fields = getBudgetFields();
+  const values = dpReadFormFields(fields);
+  const missing = dpValidateRequired(fields, values);
+  if (missing.length) { alert("Champ requis manquant : " + missing.map(f => f.label).join(", ")); return; }
+
+  const idx = DP.budgets.findIndex(b => b.annee === values.annee);
+  if (idx >= 0) {
+    DP.budgets[idx] = { ...DP.budgets[idx], ...values };
+  } else {
+    DP.budgets.push({ id: dpGenId("bud"), ...values });
+  }
+  selectedYear = values.annee;
+  dpAutoSync(["budgets"]);
+  closeDrawer();
+  render();
+}
+
+function closeDrawer() { document.getElementById("drawer-holder").innerHTML = ""; }
+
+function exportBudget() {
+  const amgts = amgtsForYear(selectedYear);
+  const contratsActifs = contratsActifsPourAnnee(selectedYear);
+  const headers = ["Type", "Nom", "Montant (€)"];
+  const rows = [
+    ...amgts.map(a => ["Projet d'aménagement", a.nom, a.budget || 0]),
+    ...contratsActifs.map(c => ["Contrat", `${c.libelle} (${c.fournisseur})`, c.montantAnnuel || 0])
+  ];
+  dpExportCSV(`dompatrimoine_budget_${selectedYear}.csv`, headers, rows);
+}
+</script>
+</body>
+</html>
