@@ -9,7 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 </head>
 <body>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 <script>
 let map, markersLayer, mapReady = false;
 let isGeocoding = false;
@@ -99,7 +99,7 @@ async function geocodeAndRenderMarkers() {
       }
       await dpSleep(1200); // respecte la politique d'usage Nominatim (~1 req/s)
     }
-    await dpAutoSync();
+    await dpAutoSync(["sites"]);
     const localises = DP.sites.filter(s => s.lat && s.lon).length;
     statusEl.textContent = `${localises} site(s) localisé(s) sur ${sites.length}.`;
   } finally {
