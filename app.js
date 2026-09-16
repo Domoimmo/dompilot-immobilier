@@ -395,6 +395,144 @@ async function dpAutoSync(keys) {
 }
 
 /* ---------------------------------------------------------------------
+   9) FICHIERS VOLUMINEUX (plans de bâtiment) — API Git Data de GitHub
+   L'API Contents (utilisée pour sites.json etc.) est fiable jusqu'à ~1 Mo.
+   Au-delà, on passe par l'API Git (blobs + arbres + commits), qui gère des
+   fichiers bien plus lourds (jusqu'à 100 Mo par blob). Les métadonnées du
+   plan (nom, étage, chemin, sha du blob) sont stockées dans sites.json ;
+   le contenu binaire lui-même vit uniquement dans l'historique Git.
+   --------------------------------------------------------------------- */
+function dpFileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function dpUploadLargeFile(path, file, onProgress) {
+  const cfg = dpGetGithubConfig();
+  if (!cfg) return { ok: false, error: "GitHub non configuré" };
+  try {
+    const base64 = await dpFileToBase64(file);
+    const apiBase = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}`;
+    const authHeaders = { Authorization: `token ${cfg.token}`, "Content-Type": "application/json" };
+
+    if (onProgress) onProgress("Envoi du fichier…");
+    const blobResp = await fetch(`${apiBase}/git/blobs`, {
+      method: "POST", headers: authHeaders,
+      body: JSON.stringify({ content: base64, encoding: "base64" })
+    });
+    if (!blobResp.ok) throw new Error("Échec de l'envoi du fichier");
+    const blob = await blobResp.json();
+
+    if (onProgress) onProgress("Mise à jour de l'arborescence…");
+    const refResp = await fetch(`${apiBase}/git/ref/heads/main`, { headers: authHeaders });
+    if (!refResp.ok) throw new Error("Impossible de lire la branche main");
+    const ref = await refResp.json();
+    const commitSha = ref.object.sha;
+
+    const commitResp = await fetch(`${apiBase}/git/commits/${commitSha}`, { headers: authHeaders });
+    if (!commitResp.ok) throw new Error("Impossible de lire le commit courant");
+    const commit = await commitResp.json();
+
+    const treeResp = await fetch(`${apiBase}/git/trees`, {
+      method: "POST", headers: authHeaders,
+      body: JSON.stringify({ base_tree: commit.tree.sha, tree: [{ path, mode: "100644", type: "blob", sha: blob.sha }] })
+    });
+    if (!treeResp.ok) throw new Error("Échec de la création de l'arborescence");
+    const tree = await treeResp.json();
+
+    if (onProgress) onProgress("Validation…");
+    const newCommitResp = await fetch(`${apiBase}/git/commits`, {
+      method: "POST", headers: authHeaders,
+      body: JSON.stringify({ message: `DomPatrimoine: ajout du plan ${path}`, tree: tree.sha, parents: [commitSha] })
+    });
+    if (!newCommitResp.ok) throw new Error("Échec de la création du commit");
+    const newCommit = await newCommitResp.json();
+
+    const updateRefResp = await fetch(`${apiBase}/git/refs/heads/main`, {
+      method: "PATCH", headers: authHeaders,
+      body: JSON.stringify({ sha: newCommit.sha })
+    });
+    if (!updateRefResp.ok) throw new Error("Échec de la mise à jour de la branche");
+
+    return { ok: true, sha: blob.sha };
+  } catch (err) {
+    console.error(err);
+    return { ok: false, error: err.message };
+  }
+}
+
+/* Récupère un fichier par le sha de son blob (fonctionne quelle que soit sa taille,
+   contrairement à l'API Contents classique) et retourne une data URI prête à afficher
+   (<img src="...">) ou à ouvrir/télécharger. */
+async function dpFetchBlobDataUrl(sha, mime) {
+  const cfg = dpGetGithubConfig();
+  if (!cfg) return null;
+  try {
+    const resp = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/git/blobs/${sha}`, {
+      headers: { Authorization: `token ${cfg.token}` }
+    });
+    if (!resp.ok) return null;
+    const j = await resp.json();
+    const clean = j.content.replace(/\n/g, "");
+    return `data:${mime || "application/octet-stream"};base64,${clean}`;
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+/* Retire un fichier du dépôt en le supprimant de l'arborescence (nouveau commit). */
+async function dpDeleteLargeFile(path) {
+  const cfg = dpGetGithubConfig();
+  if (!cfg) return false;
+  try {
+    const apiBase = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}`;
+    const authHeaders = { Authorization: `token ${cfg.token}`, "Content-Type": "application/json" };
+    const refResp = await fetch(`${apiBase}/git/ref/heads/main`, { headers: authHeaders });
+    if (!refResp.ok) return false;
+    const ref = await refResp.json();
+    const commitSha = ref.object.sha;
+    const commitResp = await fetch(`${apiBase}/git/commits/${commitSha}`, { headers: authHeaders });
+    if (!commitResp.ok) return false;
+    const commit = await commitResp.json();
+
+    const treeResp = await fetch(`${apiBase}/git/trees`, {
+      method: "POST", headers: authHeaders,
+      body: JSON.stringify({ base_tree: commit.tree.sha, tree: [{ path, mode: "100644", type: "blob", sha: null }] })
+    });
+    if (!treeResp.ok) return false;
+    const tree = await treeResp.json();
+
+    const newCommitResp = await fetch(`${apiBase}/git/commits`, {
+      method: "POST", headers: authHeaders,
+      body: JSON.stringify({ message: `DomPatrimoine: suppression du plan ${path}`, tree: tree.sha, parents: [commitSha] })
+    });
+    if (!newCommitResp.ok) return false;
+    const newCommit = await newCommitResp.json();
+
+    const updateRefResp = await fetch(`${apiBase}/git/refs/heads/main`, {
+      method: "PATCH", headers: authHeaders,
+      body: JSON.stringify({ sha: newCommit.sha })
+    });
+    return updateRefResp.ok;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
+function dpFormatBytes(n) {
+  if (!n) return "—";
+  if (n < 1024) return n + " o";
+  if (n < 1024 * 1024) return Math.round(n / 1024) + " Ko";
+  return (n / (1024 * 1024)).toFixed(1) + " Mo";
+}
+
+/* ---------------------------------------------------------------------
    7) ÉCHÉANCES DE CONTRAT
    --------------------------------------------------------------------- */
 function dpEcheanceInfo(dateEcheance) {
