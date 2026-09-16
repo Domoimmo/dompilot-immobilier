@@ -118,6 +118,40 @@ function dpSaveGithubToken(token) {
   else localStorage.removeItem("dompatrimoine_github_token");
 }
 
+/* Fusion défensive générique : quand deux onglets/appareils écrivent l'un après l'autre,
+   celui qui a chargé ses données en premier ne doit jamais effacer, avec ses champs vides,
+   des informations que l'autre a entre-temps enregistrées (mot de passe, coordonnées de
+   géocodage, rattachements...). Pour chaque enregistrement apparié par id, un champ local
+   vide (null/undefined/"") est comblé par la valeur distante correspondante si elle existe. */
+function dpMergeField(localVal, remoteVal) {
+  if (localVal === null || localVal === undefined || localVal === "") {
+    return remoteVal !== undefined ? remoteVal : localVal;
+  }
+  return localVal;
+}
+
+function dpMergeRecord(local, remote) {
+  if (!remote) return local;
+  const merged = { ...local };
+  Object.keys(remote).forEach(k => {
+    if (k === "etapes") {
+      // Tableau imbriqué (étapes d'un aménagement) : ne remplace que si la copie locale est vide.
+      if ((!merged.etapes || !merged.etapes.length) && remote.etapes && remote.etapes.length) merged.etapes = remote.etapes;
+      return;
+    }
+    merged[k] = dpMergeField(merged[k], remote[k]);
+  });
+  return merged;
+}
+
+function dpMergeArrayById(localArr, remoteArr, idKey) {
+  if (!Array.isArray(localArr) || !Array.isArray(remoteArr)) return localArr;
+  return localArr.map(item => {
+    const r = remoteArr.find(x => x[idKey] === item[idKey]);
+    return r ? dpMergeRecord(item, r) : item;
+  });
+}
+
 async function dpSyncWithGitHub() {
   const cfg = dpGetGithubConfig();
   const statusEl = document.getElementById("github-sync-status");
@@ -134,27 +168,18 @@ async function dpSyncWithGitHub() {
     if (getResp.ok) {
       const j = await getResp.json();
       sha = j.sha;
-      // Fusion défensive : n'écrase jamais un mot de passe déjà enregistré à distance avec
-      // une copie locale qui ne l'a pas encore (ex. un autre onglet resté ouvert sur une
-      // version plus ancienne). Sans ça, la dernière écriture peut effacer un mot de passe
-      // qu'un autre onglet/appareil vient tout juste de définir.
       try {
         const remote = JSON.parse(decodeURIComponent(escape(atob(j.content))));
-        if (remote && Array.isArray(remote.utilisateurs) && Array.isArray(DP.utilisateurs)) {
+        if (remote) {
           let merged = false;
-          DP.utilisateurs.forEach(u => {
-            if (!u.passwordHash) {
-              const ru = remote.utilisateurs.find(x => x.identifiant === u.identifiant);
-              if (ru && ru.passwordHash) {
-                u.passwordHash = ru.passwordHash;
-                u.passwordSalt = ru.passwordSalt;
-                merged = true;
-              }
-            }
-          });
+          if (Array.isArray(remote.sites) && Array.isArray(DP.sites)) { DP.sites = dpMergeArrayById(DP.sites, remote.sites, "id"); merged = true; }
+          if (Array.isArray(remote.contrats) && Array.isArray(DP.contrats)) { DP.contrats = dpMergeArrayById(DP.contrats, remote.contrats, "id"); merged = true; }
+          if (Array.isArray(remote.annuaire) && Array.isArray(DP.annuaire)) { DP.annuaire = dpMergeArrayById(DP.annuaire, remote.annuaire, "id"); merged = true; }
+          if (Array.isArray(remote.amenagements) && Array.isArray(DP.amenagements)) { DP.amenagements = dpMergeArrayById(DP.amenagements, remote.amenagements, "id"); merged = true; }
+          if (Array.isArray(remote.utilisateurs) && Array.isArray(DP.utilisateurs)) { DP.utilisateurs = dpMergeArrayById(DP.utilisateurs, remote.utilisateurs, "identifiant"); merged = true; }
           if (merged) dpPersist();
         }
-      } catch (mergeErr) { console.error("Fusion mot de passe échouée", mergeErr); }
+      } catch (mergeErr) { console.error("Fusion des données échouée", mergeErr); }
     }
     const content = btoa(unescape(encodeURIComponent(JSON.stringify(DP, null, 2))));
     const putResp = await fetch(apiUrl, {
