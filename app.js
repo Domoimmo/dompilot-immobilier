@@ -75,7 +75,7 @@ async function dpSetPassword(identifiant, newPassword, autoLogin) {
   const salt = dpRandomSalt();
   u.passwordSalt = salt;
   u.passwordHash = await dpHashPassword(newPassword, salt);
-  await dpAutoSync();
+  await dpAutoSync(["utilisateurs"]);
   if (autoLogin) sessionStorage.setItem(DP_SESSION_KEY, JSON.stringify({ identifiant: u.identifiant, nom: u.nom }));
   return true;
 }
@@ -98,14 +98,26 @@ function dpCurrentUser() {
 }
 
 /* ---------------------------------------------------------------------
-   3) SYNCHRONISATION GITHUB — ARCHITECTURE À DEUX DÉPÔTS (pattern DomPilot/GESTOCK)
+   3) SYNCHRONISATION GITHUB — ARCHITECTURE À DEUX DÉPÔTS, UN FICHIER PAR MODULE
+   (pattern DomPilot/GESTOCK)
    - Dépôt PUBLIC : héberge ce code (index.html, *.html, style.css, app.js)
      via GitHub Pages. Aucune donnée sensible n'y transite.
-   - Dépôt PRIVÉ : contient uniquement data.json (sites, contrats, annuaire,
-     utilisateurs). Owner/repo/chemin sont fixes (ci-dessous) — seul le
-     token doit être renseigné une fois par appareil, depuis Paramètres.
+   - Dépôt PRIVÉ : un fichier JSON par module (sites, contrats, annuaire,
+     aménagements, utilisateurs) plutôt qu'un unique data.json — ça réduit
+     la taille de chaque lecture/écriture et cantonne les conflits d'édition
+     concurrente à un seul module au lieu de tout le jeu de données. Owner/
+     repo sont fixes (ci-dessous) — seul le token doit être renseigné une
+     fois par appareil, depuis Paramètres.
    --------------------------------------------------------------------- */
-const DP_GITHUB_REPO = { owner: "Domoimmo", repo: "dompilot-immobilier-data", path: "data.json" };
+const DP_GITHUB_REPO = { owner: "Domoimmo", repo: "dompilot-immobilier-data" };
+const DP_GITHUB_FILES = {
+  sites: "sites.json",
+  contrats: "contrats.json",
+  annuaire: "annuaire.json",
+  amenagements: "amenagements.json",
+  utilisateurs: "utilisateurs.json"
+};
+const DP_ALL_KEYS = Object.keys(DP_GITHUB_FILES);
 
 function dpGetGithubConfig() {
   const token = localStorage.getItem("dompatrimoine_github_token");
@@ -152,68 +164,79 @@ function dpMergeArrayById(localArr, remoteArr, idKey) {
   });
 }
 
-async function dpSyncWithGitHub() {
+const DP_ID_KEY = { sites: "id", contrats: "id", annuaire: "id", amenagements: "id", utilisateurs: "identifiant" };
+
+/* Synchronise un ou plusieurs modules (ex. ["contrats"], ["sites","contrats"] quand une
+   suppression de site détache aussi des contrats). Sans argument, synchronise tout —
+   à réserver aux cas où l'on ne sait pas précisément ce qui a changé. Chaque module a son
+   propre cycle GET (fusion défensive) → PUT, indépendant des autres : éditer un contrat ne
+   touche jamais au fichier des sites, et inversement. */
+async function dpSyncWithGitHub(keys) {
   const cfg = dpGetGithubConfig();
   const statusEl = document.getElementById("github-sync-status");
   if (!cfg || !cfg.token || !cfg.owner || !cfg.repo) {
     if (statusEl) statusEl.textContent = "Configurez le dépôt de données dans Paramètres";
     return false;
   }
+  const targets = (keys && keys.length) ? keys : DP_ALL_KEYS;
   if (statusEl) statusEl.textContent = "Synchronisation…";
-  try {
-    const path = cfg.path || "data.json";
-    const apiUrl = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`;
-    let sha = null;
-    const getResp = await fetch(apiUrl, { headers: { Authorization: `token ${cfg.token}` } });
-    if (getResp.ok) {
-      const j = await getResp.json();
-      sha = j.sha;
-      try {
-        const remote = JSON.parse(decodeURIComponent(escape(atob(j.content))));
-        if (remote) {
-          let merged = false;
-          if (Array.isArray(remote.sites) && Array.isArray(DP.sites)) { DP.sites = dpMergeArrayById(DP.sites, remote.sites, "id"); merged = true; }
-          if (Array.isArray(remote.contrats) && Array.isArray(DP.contrats)) { DP.contrats = dpMergeArrayById(DP.contrats, remote.contrats, "id"); merged = true; }
-          if (Array.isArray(remote.annuaire) && Array.isArray(DP.annuaire)) { DP.annuaire = dpMergeArrayById(DP.annuaire, remote.annuaire, "id"); merged = true; }
-          if (Array.isArray(remote.amenagements) && Array.isArray(DP.amenagements)) { DP.amenagements = dpMergeArrayById(DP.amenagements, remote.amenagements, "id"); merged = true; }
-          if (Array.isArray(remote.utilisateurs) && Array.isArray(DP.utilisateurs)) { DP.utilisateurs = dpMergeArrayById(DP.utilisateurs, remote.utilisateurs, "identifiant"); merged = true; }
-          if (merged) dpPersist();
-        }
-      } catch (mergeErr) { console.error("Fusion des données échouée", mergeErr); }
+  let allOk = true;
+  for (const key of targets) {
+    const fileName = DP_GITHUB_FILES[key];
+    if (!fileName || !Array.isArray(DP[key])) continue;
+    try {
+      const apiUrl = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${fileName}`;
+      let sha = null;
+      const getResp = await fetch(apiUrl, { headers: { Authorization: `token ${cfg.token}` } });
+      if (getResp.ok) {
+        const j = await getResp.json();
+        sha = j.sha;
+        try {
+          const remoteArr = JSON.parse(decodeURIComponent(escape(atob(j.content))));
+          if (Array.isArray(remoteArr)) {
+            DP[key] = dpMergeArrayById(DP[key], remoteArr, DP_ID_KEY[key]);
+            dpPersist();
+          }
+        } catch (mergeErr) { console.error(`Fusion ${key} échouée`, mergeErr); }
+      }
+      const content = btoa(unescape(encodeURIComponent(JSON.stringify(DP[key], null, 2))));
+      const putResp = await fetch(apiUrl, {
+        method: "PUT",
+        headers: { Authorization: `token ${cfg.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `DomPatrimoine: mise à jour ${key} — ${new Date().toISOString()}`,
+          content, sha: sha || undefined
+        })
+      });
+      if (!putResp.ok) throw new Error(`Échec de l'écriture GitHub (${key})`);
+    } catch (err) {
+      allOk = false;
+      console.error(err);
     }
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(DP, null, 2))));
-    const putResp = await fetch(apiUrl, {
-      method: "PUT",
-      headers: { Authorization: `token ${cfg.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: `DomPatrimoine: mise à jour des données — ${new Date().toISOString()}`,
-        content, sha: sha || undefined
-      })
-    });
-    if (!putResp.ok) throw new Error("Échec de l'écriture GitHub");
-    if (statusEl) statusEl.textContent = `Synchronisé avec ${cfg.owner}/${cfg.repo} ✓`;
-    return true;
-  } catch (err) {
-    if (statusEl) statusEl.textContent = "Erreur de synchronisation";
-    console.error(err);
-    return false;
   }
+  if (statusEl) statusEl.textContent = allOk ? `Synchronisé avec ${cfg.owner}/${cfg.repo} ✓` : "Erreur de synchronisation";
+  return allOk;
 }
 
 async function dpLoadFromGitHub() {
   const cfg = dpGetGithubConfig();
   if (!cfg || !cfg.token || !cfg.owner || !cfg.repo) return false;
   try {
-    const path = cfg.path || "data.json";
-    const apiUrl = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`;
-    const resp = await fetch(apiUrl, { headers: { Authorization: `token ${cfg.token}` } });
-    if (!resp.ok) return false;
-    const j = await resp.json();
-    const raw = decodeURIComponent(escape(atob(j.content)));
-    const remote = JSON.parse(raw);
-    DP = remote;
-    dpPersist();
-    return true;
+    const results = await Promise.all(DP_ALL_KEYS.map(async key => {
+      const fileName = DP_GITHUB_FILES[key];
+      const apiUrl = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${fileName}`;
+      const resp = await fetch(apiUrl, { headers: { Authorization: `token ${cfg.token}` } });
+      if (!resp.ok) return [key, null];
+      const j = await resp.json();
+      const raw = decodeURIComponent(escape(atob(j.content)));
+      return [key, JSON.parse(raw)];
+    }));
+    let gotAny = false;
+    results.forEach(([key, arr]) => {
+      if (Array.isArray(arr)) { DP[key] = arr; gotAny = true; }
+    });
+    if (gotAny) dpPersist();
+    return gotAny;
   } catch (err) {
     console.error(err);
     return false;
@@ -363,10 +386,12 @@ function dpValidateRequired(fields, values) {
 }
 
 /* Synchronisation automatique en arrière-plan après une modification,
-   si un dépôt GitHub est configuré (sinon les données restent locales). */
-async function dpAutoSync() {
+   si un dépôt GitHub est configuré (sinon les données restent locales).
+   keys précise quel(s) module(s) ont changé (ex. dpAutoSync(["contrats"])) pour ne
+   synchroniser que le fichier concerné ; omis, synchronise tous les modules. */
+async function dpAutoSync(keys) {
   dpPersist();
-  if (dpGetGithubConfig()) await dpSyncWithGitHub();
+  if (dpGetGithubConfig()) await dpSyncWithGitHub(keys);
 }
 
 /* ---------------------------------------------------------------------
