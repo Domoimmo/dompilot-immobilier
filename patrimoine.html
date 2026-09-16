@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 <script>
 let filtres = { categorie: "", departement: "", recherche: "" };
 
@@ -171,7 +171,7 @@ function saveSite(id) {
   } else {
     DP.sites.push({ id: dpGenId("site"), ...values });
   }
-  dpAutoSync();
+  dpAutoSync(["sites"]);
   closeDrawer();
   render();
 }
@@ -184,7 +184,7 @@ function deleteSite(id) {
   if (!confirm(msg)) return;
   DP.contrats.forEach(c => { if (c.siteId === id) c.siteId = ""; });
   DP.sites = DP.sites.filter(x => x.id !== id);
-  dpAutoSync();
+  dpAutoSync(["sites", "contrats"]);
   closeDrawer();
   render();
 }
