@@ -420,6 +420,12 @@ function dpFileToBase64(file) {
   });
 }
 
+function dpSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* Écrit le blob (via l'API Git) puis met à jour la branche main. La dernière étape (mise à
+   jour de la branche) peut échouer avec 422 si quelqu'un d'autre a écrit entre-temps (ex. la
+   sauvegarde de sites.json juste après, ou une autre personne connectée) : on relit alors
+   l'état courant de la branche et on réessaie, plutôt que d'abandonner l'envoi. */
 async function dpUploadLargeFile(path, file, onProgress) {
   const cfg = dpGetGithubConfig();
   if (!cfg) return { ok: false, error: "GitHub non configuré" };
@@ -436,38 +442,47 @@ async function dpUploadLargeFile(path, file, onProgress) {
     if (!blobResp.ok) throw new Error("Échec de l'envoi du fichier");
     const blob = await blobResp.json();
 
-    if (onProgress) onProgress("Mise à jour de l'arborescence…");
-    const refResp = await fetch(`${apiBase}/git/ref/heads/main`, { headers: authHeaders });
-    if (!refResp.ok) throw new Error("Impossible de lire la branche main");
-    const ref = await refResp.json();
-    const commitSha = ref.object.sha;
+    const maxAttempts = 5;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (onProgress) onProgress(attempt === 1 ? "Mise à jour de l'arborescence…" : `Nouvelle tentative (${attempt}/${maxAttempts})…`);
 
-    const commitResp = await fetch(`${apiBase}/git/commits/${commitSha}`, { headers: authHeaders });
-    if (!commitResp.ok) throw new Error("Impossible de lire le commit courant");
-    const commit = await commitResp.json();
+      const refResp = await fetch(`${apiBase}/git/ref/heads/main`, { headers: authHeaders });
+      if (!refResp.ok) throw new Error("Impossible de lire la branche main");
+      const ref = await refResp.json();
+      const commitSha = ref.object.sha;
 
-    const treeResp = await fetch(`${apiBase}/git/trees`, {
-      method: "POST", headers: authHeaders,
-      body: JSON.stringify({ base_tree: commit.tree.sha, tree: [{ path, mode: "100644", type: "blob", sha: blob.sha }] })
-    });
-    if (!treeResp.ok) throw new Error("Échec de la création de l'arborescence");
-    const tree = await treeResp.json();
+      const commitResp = await fetch(`${apiBase}/git/commits/${commitSha}`, { headers: authHeaders });
+      if (!commitResp.ok) throw new Error("Impossible de lire le commit courant");
+      const commit = await commitResp.json();
 
-    if (onProgress) onProgress("Validation…");
-    const newCommitResp = await fetch(`${apiBase}/git/commits`, {
-      method: "POST", headers: authHeaders,
-      body: JSON.stringify({ message: `DomPatrimoine: ajout du plan ${path}`, tree: tree.sha, parents: [commitSha] })
-    });
-    if (!newCommitResp.ok) throw new Error("Échec de la création du commit");
-    const newCommit = await newCommitResp.json();
+      const treeResp = await fetch(`${apiBase}/git/trees`, {
+        method: "POST", headers: authHeaders,
+        body: JSON.stringify({ base_tree: commit.tree.sha, tree: [{ path, mode: "100644", type: "blob", sha: blob.sha }] })
+      });
+      if (!treeResp.ok) throw new Error("Échec de la création de l'arborescence");
+      const tree = await treeResp.json();
 
-    const updateRefResp = await fetch(`${apiBase}/git/refs/heads/main`, {
-      method: "PATCH", headers: authHeaders,
-      body: JSON.stringify({ sha: newCommit.sha })
-    });
-    if (!updateRefResp.ok) throw new Error("Échec de la mise à jour de la branche");
+      if (onProgress) onProgress("Validation…");
+      const newCommitResp = await fetch(`${apiBase}/git/commits`, {
+        method: "POST", headers: authHeaders,
+        body: JSON.stringify({ message: `DomPatrimoine: ajout du plan ${path}`, tree: tree.sha, parents: [commitSha] })
+      });
+      if (!newCommitResp.ok) throw new Error("Échec de la création du commit");
+      const newCommit = await newCommitResp.json();
 
-    return { ok: true, sha: blob.sha };
+      const updateRefResp = await fetch(`${apiBase}/git/refs/heads/main`, {
+        method: "PATCH", headers: authHeaders,
+        body: JSON.stringify({ sha: newCommit.sha })
+      });
+      if (updateRefResp.ok) return { ok: true, sha: blob.sha };
+
+      if (updateRefResp.status === 422 && attempt < maxAttempts) {
+        await dpSleep(400 * attempt); // quelqu'un d'autre a écrit entre-temps : on relit et on réessaie
+        continue;
+      }
+      throw new Error("Échec de la mise à jour de la branche (conflit persistant)");
+    }
+    return { ok: false, error: "Conflit persistant après plusieurs tentatives" };
   } catch (err) {
     console.error(err);
     return { ok: false, error: err.message };
@@ -501,33 +516,40 @@ async function dpDeleteLargeFile(path) {
   try {
     const apiBase = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}`;
     const authHeaders = { Authorization: `token ${cfg.token}`, "Content-Type": "application/json" };
-    const refResp = await fetch(`${apiBase}/git/ref/heads/main`, { headers: authHeaders });
-    if (!refResp.ok) return false;
-    const ref = await refResp.json();
-    const commitSha = ref.object.sha;
-    const commitResp = await fetch(`${apiBase}/git/commits/${commitSha}`, { headers: authHeaders });
-    if (!commitResp.ok) return false;
-    const commit = await commitResp.json();
 
-    const treeResp = await fetch(`${apiBase}/git/trees`, {
-      method: "POST", headers: authHeaders,
-      body: JSON.stringify({ base_tree: commit.tree.sha, tree: [{ path, mode: "100644", type: "blob", sha: null }] })
-    });
-    if (!treeResp.ok) return false;
-    const tree = await treeResp.json();
+    const maxAttempts = 5;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const refResp = await fetch(`${apiBase}/git/ref/heads/main`, { headers: authHeaders });
+      if (!refResp.ok) return false;
+      const ref = await refResp.json();
+      const commitSha = ref.object.sha;
+      const commitResp = await fetch(`${apiBase}/git/commits/${commitSha}`, { headers: authHeaders });
+      if (!commitResp.ok) return false;
+      const commit = await commitResp.json();
 
-    const newCommitResp = await fetch(`${apiBase}/git/commits`, {
-      method: "POST", headers: authHeaders,
-      body: JSON.stringify({ message: `DomPatrimoine: suppression du plan ${path}`, tree: tree.sha, parents: [commitSha] })
-    });
-    if (!newCommitResp.ok) return false;
-    const newCommit = await newCommitResp.json();
+      const treeResp = await fetch(`${apiBase}/git/trees`, {
+        method: "POST", headers: authHeaders,
+        body: JSON.stringify({ base_tree: commit.tree.sha, tree: [{ path, mode: "100644", type: "blob", sha: null }] })
+      });
+      if (!treeResp.ok) return false;
+      const tree = await treeResp.json();
 
-    const updateRefResp = await fetch(`${apiBase}/git/refs/heads/main`, {
-      method: "PATCH", headers: authHeaders,
-      body: JSON.stringify({ sha: newCommit.sha })
-    });
-    return updateRefResp.ok;
+      const newCommitResp = await fetch(`${apiBase}/git/commits`, {
+        method: "POST", headers: authHeaders,
+        body: JSON.stringify({ message: `DomPatrimoine: suppression du plan ${path}`, tree: tree.sha, parents: [commitSha] })
+      });
+      if (!newCommitResp.ok) return false;
+      const newCommit = await newCommitResp.json();
+
+      const updateRefResp = await fetch(`${apiBase}/git/refs/heads/main`, {
+        method: "PATCH", headers: authHeaders,
+        body: JSON.stringify({ sha: newCommit.sha })
+      });
+      if (updateRefResp.ok) return true;
+      if (updateRefResp.status === 422 && attempt < maxAttempts) { await dpSleep(400 * attempt); continue; }
+      return false;
+    }
+    return false;
   } catch (err) {
     console.error(err);
     return false;
